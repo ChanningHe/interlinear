@@ -1,6 +1,6 @@
 import { adapterOf, isAdapterId, normalizeOptions, type AdapterId, type ProviderOptions } from "../providers/adapters";
 import { isUiLanguageSetting, type MessageKey, type UiLanguageSetting } from "../shared/i18n";
-import { isKnownLanguage } from "../shared/languages";
+import { isKnownLanguage, languageForLocale } from "../shared/languages";
 
 export type DisplayStyle =
   | "plain" | "underline" | "dotted" | "wavy" | "highlight" | "marker" | "background"
@@ -80,7 +80,7 @@ const LIMITS = {
 } as const;
 
 export const DEFAULT_SETTINGS: Settings = {
-  targetLang: "zh-Hans",
+  targetLang: "en", // replaced by the browser language, see browserLanguage()
   activeProviderId: "",
   providers: [],
   style: "plain",
@@ -207,9 +207,14 @@ function normalizeGlossary(raw: unknown): GlossaryEntry[] {
 const bool = (v: unknown, fallback: boolean) => (typeof v === "boolean" ? v : fallback);
 const lang = (v: unknown, fallback: string) => (typeof v === "string" && isKnownLanguage(v) ? v : fallback);
 
+/** Default target language: the browser's own, read at call time (English outside extensions). */
+function browserLanguage(): string {
+  return languageForLocale(typeof chrome !== "undefined" ? (chrome.i18n?.getUILanguage?.() ?? "") : "");
+}
+
 /** Turns untrusted stored data into a fully valid Settings object. Never mutates input. */
 export function normalizeSettings(raw: unknown): Settings {
-  if (!isObject(raw)) return DEFAULT_SETTINGS;
+  if (!isObject(raw)) return normalizeSettings({});
   const d = DEFAULT_SETTINGS;
   const providers = Array.isArray(raw.providers)
     ? raw.providers.map(normalizeProvider).filter((p): p is Provider => p !== undefined)
@@ -218,7 +223,7 @@ export function normalizeSettings(raw: unknown): Settings {
   const activeProviderId = providers.some((p) => p.id === wantedId) ? wantedId : (providers[0]?.id ?? "");
 
   return {
-    targetLang: lang(raw.targetLang, d.targetLang),
+    targetLang: lang(raw.targetLang, browserLanguage()),
     activeProviderId,
     providers,
     style: oneOf(raw.style, DISPLAY_STYLES, d.style),

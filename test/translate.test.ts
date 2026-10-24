@@ -5,6 +5,7 @@ import { DEFAULT_SETTINGS, type Settings } from "../src/core/settings";
 
 const settings: Settings = {
   ...DEFAULT_SETTINGS,
+  targetLang: "zh-Hans",
   providers: [{ id: "p", name: "P", adapter: "custom-openai", options: {}, endpoint: "https://x.test/v1/chat/completions", apiKey: "k", model: "m" }],
   activeProviderId: "p",
 };

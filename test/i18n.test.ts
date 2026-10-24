@@ -1,4 +1,4 @@
-import { describe, expect, test } from "vitest";
+import { afterEach, describe, expect, test, vi } from "vitest";
 import { normalizeSettings } from "../src/core/settings";
 import {
   CONTENT_KEYS,
@@ -13,7 +13,7 @@ import { en } from "../src/shared/i18n/en";
 import { ja } from "../src/shared/i18n/ja";
 import { zhHans } from "../src/shared/i18n/zh-Hans";
 import { zhHant } from "../src/shared/i18n/zh-Hant";
-import { chineseScript } from "../src/shared/languages";
+import { chineseScript, languageForLocale } from "../src/shared/languages";
 
 const DICTIONARIES = { "zh-Hans": zhHans, "zh-Hant": zhHant, ja };
 const placeholders = (s: string) => [...s.matchAll(/\{\{?\w+\}?\}/g)].map((m) => m[0]).sort();
@@ -100,5 +100,35 @@ describe("helpers", () => {
     expect(normalizeSettings({}).uiLanguage).toBe("auto");
     for (const { value } of UI_LANGUAGES) expect(normalizeSettings({ uiLanguage: value }).uiLanguage).toBe(value);
     expect(normalizeSettings({ uiLanguage: "zh-CN" }).uiLanguage).toBe("auto");
+  });
+});
+
+describe("languageForLocale", () => {
+  test.each([
+    ["de-DE", "de"],
+    ["en-GB", "en"],
+    ["pt_BR", "pt"],
+    ["zh-CN", "zh-Hans"],
+    ["zh-TW", "zh-Hant"],
+    ["ja", "ja"],
+    ["sv-SE", "en"],
+    ["", "en"],
+  ])("%s → %s", (locale, expected) => {
+    expect(languageForLocale(locale)).toBe(expected);
+  });
+});
+
+describe("default target language", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  test("follows the browser language until one is chosen", () => {
+    vi.stubGlobal("chrome", { i18n: { getUILanguage: () => "de-DE" } });
+    expect(normalizeSettings({}).targetLang).toBe("de");
+    expect(normalizeSettings(null).targetLang).toBe("de");
+    expect(normalizeSettings({ targetLang: "ja" }).targetLang).toBe("ja");
+  });
+
+  test("is English outside the browser", () => {
+    expect(normalizeSettings({}).targetLang).toBe("en");
   });
 });

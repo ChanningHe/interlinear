@@ -43,6 +43,14 @@ export function chineseScript(code: string): ChineseScript | undefined {
   return parts.some((p) => TRADITIONAL_REGIONS.has(p)) ? "zh-Hant" : "zh-Hans";
 }
 
+/** The supported language closest to a browser locale ("de-DE" → "de", "zh-TW" → "zh-Hant"); English otherwise. */
+export function languageForLocale(locale: string): string {
+  const script = chineseScript(locale);
+  if (script) return script;
+  const primary = locale.toLowerCase().split(/[-_]/)[0] ?? "";
+  return isKnownLanguage(primary) ? primary : "en";
+}
+
 export function languageName(code: string): string {
   return LANGUAGES.find((l) => l.code === code)?.name ?? code;
 }
