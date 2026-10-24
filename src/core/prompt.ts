@@ -103,3 +103,19 @@ export function parseResponse(raw: string, count: number): (string | undefined)[
     return value || undefined;
   });
 }
+
+/**
+ * Segments of a reply that is still streaming which are already final: those followed by a
+ * complete header line. The rest is `undefined` until more text arrives or the reply ends.
+ */
+export function completedSegments(partial: string, count: number): (string | undefined)[] {
+  const none = Array.from({ length: count }, () => undefined);
+  if (count === 1 || /<think>(?![\s\S]*<\/think>)/i.test(partial)) return none;
+  const lines = partial.split("\n");
+  lines.pop(); // the last line may still be growing
+  let last = -1;
+  lines.forEach((line, i) => {
+    if (MARKER_RE.test(line)) last = i;
+  });
+  return last < 0 ? none : parseResponse(lines.slice(0, last).join("\n"), count);
+}

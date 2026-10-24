@@ -36,7 +36,23 @@ export interface TranslateRequest {
   readonly targetLang?: string;
   /** Page title, used only when the pageContext setting is on. */
   readonly context?: string;
+  /** Text on screen goes ahead of text prefetched below it. */
+  readonly priority?: TranslatePriority;
 }
+
+export type TranslatePriority = "visible" | "prefetch";
+
+/**
+ * Page translation streams over a port with this name: the content script posts one
+ * TranslateRequest, the background answers with a "result" per text as soon as it is known,
+ * then "done". Disconnecting cancels whatever has not been sent to the service yet.
+ */
+export const TRANSLATE_PORT = "translate";
+
+export type TranslateStreamMessage =
+  | { readonly type: "result"; readonly index: number; readonly result: TranslateResult }
+  | { readonly type: "done" }
+  | { readonly type: "error"; readonly error: string };
 
 // Content script / extension pages -> background
 export type BackgroundRequest =
@@ -77,8 +93,13 @@ const isObject = (v: unknown): v is Record<string, unknown> => typeof v === "obj
 
 export const isDisplayMode = (v: unknown): v is DisplayMode => v === "bilingual" || v === "translation-only";
 
+export function isTranslateResult(v: unknown): v is TranslateResult {
+  if (!isObject(v)) return false;
+  return v.ok === true ? typeof v.text === "string" : v.ok === false && typeof v.error === "string";
+}
+
 function parseTranslate(raw: Record<string, unknown>): TranslateRequest | undefined {
-  const { texts, targetLang, context } = raw;
+  const { texts, targetLang, context, priority } = raw;
   const validTexts =
     Array.isArray(texts) &&
     texts.length <= MAX_TEXTS_PER_MESSAGE &&
@@ -86,10 +107,12 @@ function parseTranslate(raw: Record<string, unknown>): TranslateRequest | undefi
   if (!validTexts) return undefined;
   if (targetLang !== undefined && !(typeof targetLang === "string" && isKnownLanguage(targetLang))) return undefined;
   if (context !== undefined && typeof context !== "string") return undefined;
+  if (priority !== undefined && priority !== "visible" && priority !== "prefetch") return undefined;
   return {
     type: "translate",
     texts,
     ...(targetLang !== undefined && { targetLang }),
+    ...(priority !== undefined && { priority }),
     ...(context && { context: context.replace(/\s+/g, " ").trim().slice(0, MAX_CONTEXT_LENGTH) }),
   };
 }

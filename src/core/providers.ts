@@ -12,6 +12,8 @@ export interface CompleteOptions {
   readonly sleep?: (ms: number) => Promise<void>;
   /** Current access token for sign-in services (ChatGPT); refreshed by the caller. */
   readonly accessToken?: () => Promise<string>;
+  /** Called with the reply received so far whenever a streamed reply grows. */
+  readonly onText?: (text: string) => void;
 }
 
 export class ProviderError extends Error {
@@ -199,7 +201,7 @@ async function errorMessage(res: Response): Promise<string> {
 }
 
 /** Reads an SSE body. Errors reported inside the stream never surface server text. */
-async function readStream(body: ReadableStream<Uint8Array>, wire: Wire): Promise<string> {
+async function readStream(body: ReadableStream<Uint8Array>, wire: Wire, onText?: (text: string) => void): Promise<string> {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
@@ -221,7 +223,10 @@ async function readStream(body: ReadableStream<Uint8Array>, wire: Wire): Promise
     if (delta.failed) {
       throw new ProviderError(delta.failed.message ?? "The service reported an error while responding", !delta.failed.final);
     }
-    text += delta.text ?? "";
+    if (delta.text) {
+      text += delta.text;
+      onText?.(text);
+    }
     stop = delta.stop ?? stop;
     return false;
   };
@@ -244,18 +249,18 @@ async function readStream(body: ReadableStream<Uint8Array>, wire: Wire): Promise
 /** A body that starts like server-sent events (field line or comment). */
 const SSE_START_RE = /^\s*(event|data|id|retry)?:/;
 
-async function readSse(body: ReadableStream<Uint8Array>, wire: Wire): Promise<string> {
+async function readSse(body: ReadableStream<Uint8Array>, wire: Wire, onText?: (text: string) => void): Promise<string> {
   try {
-    return await readStream(body, wire);
+    return await readStream(body, wire, onText);
   } catch (e) {
     if (e instanceof ProviderError) throw e;
     throw new ProviderError("Network error: " + (e as Error).message, true);
   }
 }
 
-async function readBody(res: Response, wire: Wire): Promise<string> {
+async function readBody(res: Response, wire: Wire, onText?: (text: string) => void): Promise<string> {
   const isStream = res.headers.get("content-type")?.toLowerCase().includes("text/event-stream") ?? false;
-  if (isStream && res.body) return readSse(res.body, wire);
+  if (isStream && res.body) return readSse(res.body, wire, onText);
   let raw: string;
   try {
     raw = await res.text();
@@ -263,7 +268,7 @@ async function readBody(res: Response, wire: Wire): Promise<string> {
     throw new ProviderError("Network error: " + (e as Error).message, true);
   }
   // Every request asks for a stream; some servers send one without the event-stream type.
-  if (SSE_START_RE.test(raw)) return readSse(new Response(raw).body!, wire);
+  if (SSE_START_RE.test(raw)) return readSse(new Response(raw).body!, wire, onText);
   let data: unknown;
   try {
     data = JSON.parse(raw);
@@ -306,7 +311,7 @@ async function attempt(wire: Wire, p: Provider, req: ChatRequest, opts: Complete
     const retryable = res.status === 408 || res.status === 429 || res.status >= 500;
     throw new ProviderError(`HTTP ${res.status}: ${await errorMessage(res)}`, retryable, res.status, retryAfterMs(res));
   }
-  return readBody(res, wire);
+  return readBody(res, wire, opts.onText);
 }
 
 const defaultSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
@@ -319,6 +324,8 @@ export async function complete(p: Provider, req: ChatRequest, opts: CompleteOpti
     try {
       return await attempt(wire, p, req, opts);
     } catch (e) {
+      // A stream cut by our own abort surfaces as a read error; it must not wait out a backoff.
+      if (opts.signal?.aborted) throw new ProviderError("Request aborted", false);
       if (!(e instanceof ProviderError) || !e.retryable || i >= MAX_ATTEMPTS) throw e;
       await sleep(e.retryAfterMs ?? Math.min(BASE_BACKOFF_MS * 2 ** (i - 1), MAX_BACKOFF_MS));
     }

@@ -34,8 +34,10 @@ function fakeModel(drop: string[] = []) {
 describe("translator", () => {
   test("reports a clear error when no provider is configured", async () => {
     const t = createTranslator({ getSettings: async () => DEFAULT_SETTINGS, cache: memoryCache(), complete: fakeModel() });
-    const res = await t.translate(["a"]);
+    const seen: unknown[] = [];
+    const res = await t.translate(["a"], { onResult: (_, r) => seen.push(r) });
     expect(res).toEqual([{ ok: false, error: expect.stringContaining("No translation service") }]);
+    expect(seen).toEqual(res); // streamed to pages too
   });
 
   test("translates a batch in one request and caches results", async () => {
@@ -171,5 +173,68 @@ describe("translator", () => {
     current = { ...settings, pageContext: true };
     await t.translate(["x"], { context: "Docs" });
     expect(complete.mock.calls[1]![1].system).toContain('titled "Docs"');
+  });
+
+  test("reports each segment as soon as the stream has finished it", async () => {
+    const events: string[] = [];
+    const complete = vi.fn(async (_p: unknown, _req: unknown, opts?: { onText?: (t: string) => void }) => {
+      opts?.onText?.("[[1]]\nA\n[[2]]\nB");
+      events.push("stream still open");
+      return "[[1]]\nA\n[[2]]\nB";
+    });
+    const t = createTranslator({ getSettings: async () => settings, cache: memoryCache(), complete });
+    const results = await t.translate(["a", "b"], { onResult: (i, r) => events.push(`${i}:${r.ok ? r.text : r.error}`) });
+    expect(events).toEqual(["0:A", "stream still open", "1:B"]);
+    expect(results).toEqual([{ ok: true, text: "A" }, { ok: true, text: "B" }]);
+  });
+
+  test("cached texts are reported before any request is made", async () => {
+    const cache = memoryCache();
+    const complete = fakeModel();
+    const t = createTranslator({ getSettings: async () => settings, cache, complete });
+    await t.translate(["hello"]);
+    const seen: number[] = [];
+    await t.translate(["hello", "world"], { onResult: (i) => seen.push(i) });
+    expect(seen).toEqual([0, 1]);
+    expect(complete).toHaveBeenCalledTimes(2);
+  });
+
+  test("visible text is sent before prefetched text when the queue is full", async () => {
+    const order: string[] = [];
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => (release = r));
+    const complete = vi.fn(async (_p: unknown, req: { user: string }) => {
+      order.push(req.user);
+      if (req.user === "first") await gate;
+      return req.user;
+    });
+    const t = createTranslator({ getSettings: async () => ({ ...settings, concurrency: 1 }), cache: memoryCache(), complete });
+    const first = t.translate(["first"]);
+    await vi.waitFor(() => expect(order).toEqual(["first"]));
+    const later = t.translate(["below"], { priority: "prefetch" });
+    const now = t.translate(["on screen"], { priority: "visible" });
+    await new Promise((r) => setTimeout(r, 20)); // both reach the queue (cache lookups are async)
+    release();
+    await Promise.all([first, later, now]);
+    expect(order).toEqual(["first", "on screen", "below"]);
+  });
+
+  test("an aborted request never reaches the service", async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => (release = r));
+    const complete = vi.fn(async (_p: unknown, req: { user: string }) => {
+      if (req.user === "first") await gate;
+      return req.user;
+    });
+    const t = createTranslator({ getSettings: async () => ({ ...settings, concurrency: 1 }), cache: memoryCache(), complete });
+    const first = t.translate(["first"]);
+    await vi.waitFor(() => expect(complete).toHaveBeenCalledTimes(1));
+    const controller = new AbortController();
+    const cancelled = t.translate(["gone"], { signal: controller.signal });
+    controller.abort();
+    release();
+    await first;
+    expect((await cancelled)[0]).toMatchObject({ ok: false });
+    expect(complete).toHaveBeenCalledTimes(1);
   });
 });

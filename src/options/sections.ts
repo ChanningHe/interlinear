@@ -1,5 +1,6 @@
 import {
   GLOSSARY_LIMITS,
+  LIMITS,
   exportSettings,
   formatGlossary,
   importSettings,
@@ -366,13 +367,12 @@ function advancedSection(ctx: OptionsContext): Node[] {
     send<{ ok?: boolean; error?: string }>({ type: "clear-cache" })
       .then((res) => showStatus(cacheStatus, res.ok ? t("cacheCleared") : (res.error ?? t("failed")), res.ok ? "ok" : "error"))
       .catch((e: unknown) => showStatus(cacheStatus, String(e), "error"));
-  const number = (value: number, key: "maxCharsPerBatch" | "maxItemsPerBatch" | "concurrency", min: number, max: number) =>
-    numberInput(value, (v) => ctx.patch({ [key]: v }), min, max);
+  const number = (key: keyof typeof LIMITS) => numberInput(draft[key], (v) => ctx.patch({ [key]: v }), LIMITS[key].min, LIMITS[key].max);
   return [
     group(
-      settingRow(t("charsPerRequest"), t("charsPerRequestDesc"), number(draft.maxCharsPerBatch, "maxCharsPerBatch", 200, 20000)),
-      settingRow(t("itemsPerRequest"), null, number(draft.maxItemsPerBatch, "maxItemsPerBatch", 1, 100)),
-      settingRow(t("parallelRequests"), t("parallelRequestsDesc"), number(draft.concurrency, "concurrency", 1, 10)),
+      settingRow(t("charsPerRequest"), t("charsPerRequestDesc"), number("maxCharsPerBatch")),
+      settingRow(t("itemsPerRequest"), null, number("maxItemsPerBatch")),
+      settingRow(t("parallelRequests"), t("parallelRequestsDesc"), number("concurrency")),
     ),
     group(settingRow(t("cache"), cacheStatus, h("button", { onClick: () => void clear() }, t("clearCache"))), ...backupRows(ctx)),
   ];

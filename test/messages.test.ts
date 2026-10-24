@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { MAX_CONTEXT_LENGTH } from "../src/core/prompt";
-import { MAX_TEXTS_PER_MESSAGE, MAX_TEXT_LENGTH, parseBackgroundRequest } from "../src/shared/messages";
+import { MAX_TEXTS_PER_MESSAGE, MAX_TEXT_LENGTH, isTranslateResult, parseBackgroundRequest } from "../src/shared/messages";
 import { serialize } from "../src/content/serialize";
 
 describe("parseBackgroundRequest", () => {
@@ -25,6 +25,10 @@ describe("parseBackgroundRequest", () => {
     expect(parseBackgroundRequest({ type: "translate", texts: ["a"], context: "" })).toEqual({ type: "translate", texts: ["a"] });
   });
 
+  test("translate keeps a known priority", () => {
+    expect(parseBackgroundRequest({ type: "translate", texts: ["a"], priority: "prefetch" })).toEqual({ type: "translate", texts: ["a"], priority: "prefetch" });
+  });
+
   test.each([
     null,
     "translate",
@@ -39,6 +43,7 @@ describe("parseBackgroundRequest", () => {
     { type: "translate", texts: ["a"], context: 5 },
     { type: "set-mode", tabId: 1, mode: "sideways" },
     { type: "set-mode", mode: "bilingual" },
+    { type: "translate", texts: ["a"], priority: "urgent" },
   ])("rejects %j", (raw) => {
     expect(parseBackgroundRequest(raw)).toBeUndefined();
   });
@@ -51,5 +56,17 @@ describe("form controls inside paragraphs", () => {
     const { text, tokens } = serialize([...document.getElementById("r")!.childNodes]);
     expect(text).toBe("Agree and <g1>read </g1> now");
     expect([...tokens.values()].map((t) => t.el.localName)).toEqual(["a"]);
+  });
+});
+
+describe("isTranslateResult", () => {
+  test.each([
+    [{ ok: true, text: "x" }, true],
+    [{ ok: false, error: "e" }, true],
+    [{ ok: true }, false],
+    [{ ok: "yes", text: "x" }, false],
+    [null, false],
+  ])("%j → %s", (v, expected) => {
+    expect(isTranslateResult(v)).toBe(expected);
   });
 });

@@ -1,18 +1,22 @@
 import type { DisplayMode } from "../core/settings";
-import type {
-  BackgroundRequest,
-  ContentRequest,
-  PageConfig,
-  PageInit,
-  TabState,
-  TranslateResult,
+import {
+  TRANSLATE_PORT,
+  isTranslateResult,
+  type BackgroundRequest,
+  type ContentRequest,
+  type PageConfig,
+  type PageInit,
+  type TabState,
+  type TranslateRequest,
+  type TranslateResult,
+  type TranslateStreamMessage,
 } from "../shared/messages";
 import { installHover, hoveredElement } from "./hover";
 import { installTripleSpace, translateField, type Field } from "./input";
 import { chromeDetector, createLanguageFilter } from "./lang";
 import { createPopover, type Popover } from "./popover";
 import { installSelectionButton, selectionRect } from "./selection";
-import { createPageTranslator, intersectionVisibility } from "./translator";
+import { createPageTranslator, intersectionVisibility, type PageTranslateOptions } from "./translator";
 
 // Loaded either on demand (toolbar button, shortcut, context menu) or by the browser on sites the
 // user opted into, and may be injected more than once. The flag lives in the extension's
@@ -44,6 +48,40 @@ async function translateTexts(texts: readonly string[], targetLang?: string): Pr
   return res;
 }
 
+/** Page translation: results arrive one by one over a port; aborting disconnects it, which cancels the rest. */
+function streamTexts(texts: readonly string[], opts: PageTranslateOptions): Promise<TranslateResult[]> {
+  return new Promise((resolve, reject) => {
+    if (opts.signal.aborted) return reject(new Error("Translation stopped"));
+    const port = chrome.runtime.connect({ name: TRANSLATE_PORT });
+    const results: (TranslateResult | undefined)[] = texts.map(() => undefined);
+    let finished = false;
+    const finish = (settle: () => void) => {
+      if (finished) return;
+      finished = true;
+      opts.signal.removeEventListener("abort", onAbort);
+      port.disconnect();
+      settle();
+    };
+    const onAbort = () => finish(() => reject(new Error("Translation stopped")));
+    opts.signal.addEventListener("abort", onAbort);
+    port.onMessage.addListener((msg: TranslateStreamMessage) => {
+      if (msg?.type === "result") {
+        const { index, result } = msg;
+        if (!Number.isInteger(index) || index < 0 || index >= texts.length || !isTranslateResult(result)) return;
+        results[index] = result;
+        opts.onResult(index, result);
+      } else if (msg?.type === "done") {
+        finish(() => resolve(results.map((r) => r ?? { ok: false, error: "No result returned" })));
+      } else if (msg?.type === "error") {
+        finish(() => reject(new Error(String(msg.error))));
+      }
+    });
+    port.onDisconnect.addListener(() => finish(() => reject(new Error("No response from the extension background"))));
+    const context = config?.pageContext ? document.title : undefined;
+    port.postMessage({ type: "translate", texts, context, priority: opts.priority } satisfies TranslateRequest);
+  });
+}
+
 async function translateOne(text: string, targetLang?: string): Promise<TranslateResult> {
   try {
     return (await translateTexts([text], targetLang))[0] ?? { ok: false, error: "No result returned" };
@@ -67,7 +105,7 @@ async function ensureTranslator(): Promise<PageTranslator> {
   translator ??= createPageTranslator({
     config: { ...c, displayMode: pageMode ?? c.displayMode },
     root: document.body,
-    translate: (texts) => translateTexts(texts),
+    translate: streamTexts,
     isTargetLanguage: createLanguageFilter(c.targetLang, chromeDetector, document.documentElement.lang),
     createVisibility: intersectionVisibility,
   });

@@ -123,6 +123,13 @@ describe("streaming", () => {
     await expect(complete(openai, req, noSleep)).resolves.toBe("你好");
   });
 
+  test("reports the text received so far after every delta", async () => {
+    mockFetch(sse([{ choices: [{ delta: { content: "你" } }] }, { choices: [{ delta: { role: "assistant" } }] }, { choices: [{ delta: { content: "好" } }] }, "data: [DONE]"], "\n\n"));
+    const seen: string[] = [];
+    await expect(complete(openai, req, { ...noSleep, onText: (t) => seen.push(t) })).resolves.toBe("你好");
+    expect(seen).toEqual(["你", "你好"]);
+  });
+
   test("assembles Anthropic text deltas and ignores other events", async () => {
     mockFetch(
       sse([
@@ -171,6 +178,22 @@ describe("retry policy", () => {
     const fetchFn = mockFetch(json({}, 429, { "retry-after": "1" }), json({}, 503), ok);
     await expect(complete(openai, req, noSleep)).resolves.toBe("ok");
     expect(fetchFn).toHaveBeenCalledTimes(3);
+  });
+
+  test("a stream cut short by an abort is not retried", async () => {
+    const controller = new AbortController();
+    const body = new ReadableStream<Uint8Array>({
+      start(c) {
+        c.enqueue(new TextEncoder().encode('data: {"choices":[{"delta":{"content":"x"}}]}\n\n'));
+        controller.abort();
+        c.error(new DOMException("aborted", "AbortError"));
+      },
+    });
+    const sleep = vi.fn(async () => {});
+    const fetchFn = mockFetch(new Response(body, { headers: { "content-type": "text/event-stream" } }));
+    await expect(complete(openai, req, { sleep, signal: controller.signal })).rejects.toMatchObject({ retryable: false });
+    expect(sleep).not.toHaveBeenCalled();
+    expect(fetchFn).toHaveBeenCalledTimes(1);
   });
 
   test("retries network errors", async () => {

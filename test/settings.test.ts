@@ -60,6 +60,7 @@ describe("normalizeSettings", () => {
     expect(s.maxItemsPerBatch).toBe(100);
     expect(s.concurrency).toBe(1);
     expect(normalizeSettings({ concurrency: 2.5, maxItemsPerBatch: 7.2 })).toMatchObject({ concurrency: 3, maxItemsPerBatch: 7 });
+    expect(normalizeSettings({}).concurrency).toBe(6);
   });
 
   test("drops malformed providers and dangling active id", () => {
@@ -227,7 +228,7 @@ describe("export / import", () => {
 
   test("import validates like stored data", () => {
     const imported = importSettings(JSON.stringify({ style: "neon", concurrency: 999, autoSites: ["javascript:alert(1)"] }), current);
-    expect(imported).toMatchObject({ style: "plain", concurrency: 10, autoSites: [] });
+    expect(imported).toMatchObject({ style: "plain", concurrency: 32, autoSites: [] });
   });
 
   test("import rejects files that are not JSON", () => {

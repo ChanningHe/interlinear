@@ -73,10 +73,13 @@ const HOVER_MODIFIERS: readonly HoverModifier[] = ["off", "ctrl", "alt", "shift"
 export const GLOSSARY_LIMITS = { entries: 200, chars: 100 } as const;
 const MAX_AUTO_SITES = 500;
 
-const LIMITS = {
+/** Ranges of the numeric settings; the settings page uses the same bounds. */
+export const LIMITS = {
   maxCharsPerBatch: { min: 200, max: 20000 },
   maxItemsPerBatch: { min: 1, max: 100 },
-  concurrency: { min: 1, max: 10 },
+  // Shared by all tabs. HTTP/2 services multiplex this many requests on one connection, and 429s
+  // back off; local HTTP/1.1 servers are capped at 6 connections by the browser anyway.
+  concurrency: { min: 1, max: 32 },
 } as const;
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -87,7 +90,7 @@ export const DEFAULT_SETTINGS: Settings = {
   customPrompt: "",
   maxCharsPerBatch: 2000,
   maxItemsPerBatch: 20,
-  concurrency: 3,
+  concurrency: 6,
   displayMode: "bilingual",
   scope: "content",
   autoSites: [],

@@ -19,12 +19,14 @@ import {
   MAX_TEXT_LENGTH,
   MODE_COMMAND,
   TOGGLE_COMMAND,
+  TRANSLATE_PORT,
   parseBackgroundRequest,
   type BackgroundRequest,
   type ContentRequest,
   type PageConfig,
   type PageInit,
   type TabState,
+  type TranslateStreamMessage,
 } from "../shared/messages";
 import {
   SignedOutError,
@@ -36,7 +38,7 @@ import {
 } from "../providers/chatgpt-auth";
 import { listModels } from "../providers/models";
 import { createIdbCache } from "./cache";
-import { createTranslator, publicError } from "./translate";
+import { createTranslator, publicError, type CompleteRequestOptions } from "./translate";
 
 const log = (...args: unknown[]) => console.warn("[interlinear]", ...args);
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -170,9 +172,9 @@ async function assertAccess(p: Provider): Promise<void> {
   }
 }
 
-async function completeWithPermission(p: Provider, req: ChatRequest): Promise<string> {
+async function completeWithPermission(p: Provider, req: ChatRequest, opts: CompleteRequestOptions = {}): Promise<string> {
   await assertAccess(p);
-  return withKeepAlive(() => complete(p, req, { accessToken: accessToken(p.id) }));
+  return withKeepAlive(() => complete(p, req, { ...opts, accessToken: accessToken(p.id) }));
 }
 
 /** Model list for the settings page (extension pages only). */
@@ -293,7 +295,7 @@ interface RequestContext {
 async function handle(req: BackgroundRequest, ctx: RequestContext): Promise<unknown> {
   switch (req.type) {
     case "translate":
-      return translator.translate(req.texts, { useCache: !ctx.incognito, targetLang: req.targetLang, context: req.context });
+      return translator.translate(req.texts, { useCache: !ctx.incognito, targetLang: req.targetLang, context: req.context, priority: req.priority });
     case "page-config":
       return pageConfig(await getSettings());
     case "page-init": {
@@ -344,6 +346,54 @@ chrome.runtime.onMessage.addListener((raw, sender, sendResponse) => {
     sendResponse({ error: fromExtensionPage ? message(e) : publicError(e) });
   });
   return true;
+});
+
+// Page translation streams results over a port (see TRANSLATE_PORT); one request per port.
+chrome.runtime.onConnect.addListener((port) => {
+  if (port.name !== TRANSLATE_PORT || port.sender?.id !== chrome.runtime.id) return port.disconnect();
+  const controller = new AbortController();
+  port.onDisconnect.addListener(() => controller.abort());
+  const post = (msg: TranslateStreamMessage) => {
+    if (controller.signal.aborted) return;
+    try {
+      port.postMessage(msg);
+    } catch {
+      controller.abort(); // the page went away
+    }
+  };
+  let started = false;
+  const sent = new Set<number>();
+  port.onMessage.addListener((raw: unknown) => {
+    const req = parseBackgroundRequest(raw);
+    if (started || req?.type !== "translate") {
+      post({ type: "error", error: "Invalid request" });
+      return port.disconnect();
+    }
+    started = true;
+    translator
+      .translate(req.texts, {
+        useCache: !(port.sender?.tab?.incognito ?? false),
+        targetLang: req.targetLang,
+        context: req.context,
+        priority: req.priority,
+        signal: controller.signal,
+        onResult: (index, result) => {
+          sent.add(index);
+          post({ type: "result", index, result });
+        },
+      })
+      .then(
+        (results) => {
+          // Anything not streamed (a path that returned without reporting) is sent before "done".
+          results.forEach((result, index) => sent.has(index) || post({ type: "result", index, result }));
+          post({ type: "done" });
+        },
+        (e: unknown) => {
+          log("translate failed:", e);
+          post({ type: "error", error: publicError(e) });
+        },
+      );
+  });
 });
 
 // Every entry point below is a user gesture, which grants activeTab for the current page.

@@ -1,6 +1,6 @@
 import { chunkBatches } from "../core/batch";
 import type { DisplayMode } from "../core/settings";
-import type { PageConfig, TranslateResult } from "../shared/messages";
+import type { PageConfig, TranslatePriority, TranslateResult } from "../shared/messages";
 import { blockAncestor, collectUnits, contentRoots, isInsideSkipped, sourceOf, type CollectOptions, type Unit } from "./dom";
 import {
   ONLY_ATTR,
@@ -24,10 +24,18 @@ export interface Visibility {
   disconnect(): void;
 }
 
+export interface PageTranslateOptions {
+  readonly priority: TranslatePriority;
+  /** Aborted when translation is turned off. */
+  readonly signal: AbortSignal;
+  /** Results that arrive before the whole batch is done. */
+  readonly onResult: (index: number, result: TranslateResult) => void;
+}
+
 export interface PageTranslatorDeps {
   readonly config: PageConfig;
   readonly root: Element;
-  readonly translate: (texts: readonly string[]) => Promise<TranslateResult[]>;
+  readonly translate: (texts: readonly string[], opts: PageTranslateOptions) => Promise<TranslateResult[]>;
   readonly isTargetLanguage: (text: string) => Promise<boolean>;
   readonly createVisibility: (onVisible: (els: readonly Element[]) => void) => Visibility;
   readonly queueDelayMs?: number;
@@ -36,6 +44,8 @@ export interface PageTranslatorDeps {
   readonly charAllowance?: number;
   /** Tests cannot produce trusted events; production always requires them. */
   readonly requireTrustedClick?: boolean;
+  /** Whether a paragraph is in the viewport now (rather than in the prefetch margin). */
+  readonly isOnScreen?: (host: Element) => boolean;
 }
 
 interface Tracked {
@@ -59,6 +69,16 @@ const MUTATION_DELAY_MS = 300;
  * After this many characters per activation the user has to click to continue.
  */
 const CHAR_ALLOWANCE = 200_000;
+/**
+ * Text on screen is split into smaller batches so they run side by side and the viewport fills
+ * in sooner; prefetched text uses the configured batch size.
+ */
+const VISIBLE_BATCH_CHARS = 800;
+
+function inViewport(host: Element): boolean {
+  const r = host.getBoundingClientRect();
+  return r.bottom > 0 && r.top < window.innerHeight;
+}
 
 const anchorOf = (u: Unit): Node => u.nodes[u.nodes.length - 1]!;
 const isOwnNode = (n: Node) => n instanceof Element && n.hasAttribute(OWN_ATTR);
@@ -125,6 +145,7 @@ export function createPageTranslator(deps: PageTranslatorDeps) {
   const mutationDelay = deps.mutationDelayMs ?? MUTATION_DELAY_MS;
   const allowanceStep = deps.charAllowance ?? CHAR_ALLOWANCE;
   const requireTrustedClick = deps.requireTrustedClick ?? true;
+  const isOnScreen = deps.isOnScreen ?? inViewport;
 
   /** Observers are running: whole page, or at least one region. */
   let active = false;
@@ -148,6 +169,8 @@ export function createPageTranslator(deps: PageTranslatorDeps) {
   let wrapperAnchor = new WeakMap<Element, Node>();
   let hostUnits = new WeakMap<Element, readonly Unit[]>();
   let queue: readonly Unit[] = [];
+  /** Aborted by stop(): requests still waiting or streaming are cancelled. */
+  let session = new AbortController();
   let pendingRoots: ReadonlySet<Element> = new Set();
   let queueTimer: ReturnType<typeof setTimeout> | undefined;
   let mutationTimer: ReturnType<typeof setTimeout> | undefined;
@@ -267,40 +290,56 @@ export function createPageTranslator(deps: PageTranslatorDeps) {
     queueTimer ??= setTimeout(flush, queueDelay);
   }
 
+  /** Text on screen first, in smaller batches; the prefetch margin after it. */
   function flush(): void {
     const items = queue;
     queue = [];
     queueTimer = undefined;
-    const limits = { maxChars: deps.config.maxCharsPerBatch, maxItems: deps.config.maxItemsPerBatch };
-    chunkBatches(items, (u) => u.text.length, limits).forEach((batch) => void sendBatch(batch));
+    const { maxCharsPerBatch: maxChars, maxItemsPerBatch: maxItems } = deps.config;
+    const onScreen = new Set(items.filter((u) => isOnScreen(u.host)));
+    const later = items.filter((u) => !onScreen.has(u));
+    const size = (u: Unit) => u.text.length;
+    chunkBatches([...onScreen], size, { maxChars: Math.min(maxChars, VISIBLE_BATCH_CHARS), maxItems }).forEach((b) => void sendBatch(b, "visible"));
+    chunkBatches(later, size, { maxChars, maxItems }).forEach((b) => void sendBatch(b, "prefetch"));
   }
 
-  async function sendBatch(batch: readonly Unit[]): Promise<void> {
-    let results: readonly TranslateResult[];
-    try {
-      results = await deps.translate(batch.map((u) => u.text));
-    } catch (e) {
-      results = batch.map(() => ({ ok: false, error: message(e) }));
+  function show(u: Unit, r: TranslateResult): void {
+    const wrapper = tracked.get(anchorOf(u))?.wrapper;
+    if (!isCurrent(u) || !wrapper?.isConnected) return;
+    if (r.ok && isUnchanged(u, r.text)) {
+      removeWrapper(wrapper);
+      update(u, { wrapper: undefined });
+      return;
     }
-    batch.forEach((u, i) => {
-      const wrapper = tracked.get(anchorOf(u))?.wrapper;
-      if (!isCurrent(u) || !wrapper?.isConnected) return;
-      const r = results[i] ?? { ok: false, error: "No result returned" };
-      if (r.ok && isUnchanged(u, r.text)) {
-        removeWrapper(wrapper);
-        update(u, { wrapper: undefined });
-        return;
-      }
-      if (r.ok) {
-        showTranslation(wrapper, u, r.text);
-        if (mode === "translation-only") hideOriginal(u, wrapper);
-        return;
-      }
-      showError(wrapper, retryView(r.error), () => {
-        showLoading(wrapper);
-        enqueue(u);
-      });
+    if (r.ok) {
+      showTranslation(wrapper, u, r.text);
+      if (mode === "translation-only") hideOriginal(u, wrapper);
+      return;
+    }
+    showError(wrapper, retryView(r.error), () => {
+      showLoading(wrapper);
+      enqueue(u);
     });
+  }
+
+  async function sendBatch(batch: readonly Unit[], priority: TranslatePriority): Promise<void> {
+    const { signal } = session;
+    const shown = new Set<number>();
+    const showOnce = (i: number, r: TranslateResult) => {
+      if (shown.has(i) || !batch[i]) return;
+      shown.add(i);
+      show(batch[i], r);
+    };
+    try {
+      const results = await deps.translate(
+        batch.map((u) => u.text),
+        { priority, signal, onResult: showOnce },
+      );
+      batch.forEach((_, i) => showOnce(i, results[i] ?? { ok: false, error: "No result returned" }));
+    } catch (e) {
+      if (signal.aborted) return; // turned off: the wrappers are gone already
+      batch.forEach((_, i) => showOnce(i, { ok: false, error: message(e) }));
+    }
   }
 
   function onMutations(records: readonly MutationRecord[]): void {
@@ -350,6 +389,7 @@ export function createPageTranslator(deps: PageTranslatorDeps) {
   function activate(): void {
     if (active) return;
     active = true;
+    session = new AbortController();
     visibility = deps.createVisibility(onVisible);
     mutations = new MutationObserver(onMutations);
     mutations.observe(deps.root, {
@@ -396,6 +436,7 @@ export function createPageTranslator(deps: PageTranslatorDeps) {
     stop(): void {
       if (!active) return;
       active = false;
+      session.abort();
       wholePage = false;
       regions = new Set();
       scopeRoots = [];

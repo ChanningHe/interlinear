@@ -329,3 +329,53 @@ describe("language filter", () => {
     expect(await filter("text")).toBe(false);
   });
 });
+
+describe("streaming and priority", () => {
+  test("each paragraph is shown as soon as its result arrives", async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => (release = r));
+    const translate = vi.fn(async (texts: readonly string[], opts?: { onResult?: (i: number, r: TranslateResult) => void }) => {
+      opts?.onResult?.(0, { ok: true, text: "FIRST" });
+      await gate;
+      return texts.map((t, i) => ({ ok: true as const, text: i === 0 ? "FIRST" : t.toUpperCase() }));
+    });
+    const t = setup("<p>first paragraph</p><p>second paragraph</p>", { translate });
+    t.start();
+    await vi.waitFor(() => expect(translations()).toEqual(["FIRST"]));
+    release();
+    await vi.waitFor(() => expect(translations()).toEqual(["FIRST", "SECOND PARAGRAPH"]));
+  });
+
+  test("turning translation off cancels requests still in flight", async () => {
+    let signal: AbortSignal | undefined;
+    const translate = vi.fn((_texts: readonly string[], opts?: { signal?: AbortSignal }) => {
+      signal = opts?.signal;
+      return new Promise<TranslateResult[]>(() => {});
+    });
+    const t = setup("<p>Some paragraph</p>", { translate });
+    t.start();
+    await vi.waitFor(() => expect(translate).toHaveBeenCalled());
+    expect(signal?.aborted).toBe(false);
+    t.stop();
+    expect(signal?.aborted).toBe(true);
+  });
+
+  test("text on screen is sent first, marked visible", async () => {
+    const calls: { texts: readonly string[]; priority?: string }[] = [];
+    const translate = vi.fn(async (texts: readonly string[], opts?: { priority?: string }) => {
+      calls.push({ texts, priority: opts?.priority });
+      return texts.map((x) => ({ ok: true as const, text: x.toUpperCase() }));
+    });
+    const t = setup('<p id="below">below the fold</p><p id="seen">on the screen</p>', {
+      translate,
+      isOnScreen: (el) => el.id === "seen",
+    });
+    t.start();
+    await vi.waitFor(() => expect(calls).toHaveLength(2));
+    expect(calls).toEqual([
+      { texts: ["on the screen"], priority: "visible" },
+      { texts: ["below the fold"], priority: "prefetch" },
+    ]);
+  });
+});
+
