@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Browser Translate Settings</title>
+    <link rel="stylesheet" href="ui.css" />
+    <!-- The style previews use the exact rules injected into translated pages. -->
+    <link rel="stylesheet" href="content.css" />
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <div class="layout">
+      <nav class="nav" id="nav" aria-label="Settings sections"></nav>
+      <main id="app"></main>
+    </div>
+    <footer class="savebar">
+      <div class="savebar-inner">
+        <span class="dirty" id="dirty" hidden>Unsaved changes</span>
+        <span class="status" id="status" role="status"></span>
+        <span class="spacer"></span>
+        <button id="discard" hidden>Discard</button>
+        <button class="primary" id="save">Save</button>
+      </div>
+    </footer>
+    <script src="options.js"></script>
+  </body>
+</html>

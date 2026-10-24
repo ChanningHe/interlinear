@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Browser Translate</title>
+    <link rel="stylesheet" href="ui.css" />
+    <style>
+      body {
+        width: 320px;
+        background: var(--bg);
+      }
+      .head {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 12px 12px 12px 14px;
+      }
+      .head img {
+        width: 20px;
+        height: 20px;
+      }
+      .head h1 {
+        flex: 1;
+        font-size: 14px;
+        font-weight: 600;
+      }
+      .head button {
+        width: 30px;
+        min-height: 30px;
+        color: var(--muted);
+      }
+      #app {
+        display: grid;
+        gap: 10px;
+        padding: 0 12px 12px;
+      }
+      #toggle {
+        justify-content: space-between;
+        width: 100%;
+        min-height: 42px;
+        padding: 0 14px;
+        font-size: 14px;
+        font-weight: 600;
+      }
+      #toggle kbd {
+        background: rgba(255, 255, 255, 0.18);
+        border-color: rgba(255, 255, 255, 0.3);
+        color: inherit;
+      }
+      #toggle.active {
+        background: var(--surface);
+        border-color: var(--border-strong);
+        color: var(--text);
+      }
+      #toggle.active kbd {
+        background: var(--surface-2);
+        border-color: var(--border-strong);
+      }
+      .setting {
+        min-height: 46px;
+        padding: 8px 12px;
+      }
+      .setting-title {
+        font-size: 13px;
+      }
+      .setting-desc {
+        font-size: 12px;
+      }
+      .setting-control select {
+        width: 160px;
+        min-height: 30px;
+        font-size: 13px;
+      }
+      .segmented span {
+        padding: 3px 10px;
+        font-size: 12.5px;
+      }
+      .hints {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px 12px;
+        padding: 0 2px;
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .hints kbd {
+        font-size: 11px;
+        margin-right: 4px;
+      }
+      .empty {
+        display: grid;
+        gap: 12px;
+        padding: 16px;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <header class="head">
+      <img src="icons/32.png" alt="" />
+      <h1>Browser Translate</h1>
+      <button class="ghost icon" id="settings" title="Settings" aria-label="Open settings"></button>
+    </header>
+    <main id="app"></main>
+    <script src="popup.js"></script>
+  </body>
+</html>

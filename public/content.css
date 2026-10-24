@@ -1,0 +1,157 @@
+/* Injected only into pages the user chose to translate. Everything is scoped to bt-tr[data-bt]. */
+
+bt-tr[data-bt] {
+  --bt-accent: #2563eb;
+  --bt-error: #dc2626;
+  font: inherit;
+  color: inherit;
+  word-break: break-word;
+}
+
+bt-tr[data-bt].bt-block {
+  display: block;
+  margin: 0.3em 0 0;
+}
+
+bt-tr[data-bt].bt-inline {
+  display: inline;
+  margin-inline-start: 0.4em;
+}
+
+bt-tr[data-bt].bt-loading::after {
+  content: "";
+  display: inline-block;
+  width: 0.7em;
+  height: 0.7em;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  opacity: 0.4;
+  vertical-align: middle;
+  animation: bt-spin 0.8s linear infinite;
+}
+
+@keyframes bt-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+bt-tr[data-bt].bt-error button {
+  all: unset;
+  cursor: pointer;
+  color: var(--bt-error);
+  font-size: 0.85em;
+}
+
+bt-tr[data-bt].bt-error button:focus-visible {
+  outline: 2px solid var(--bt-error);
+  outline-offset: 2px;
+}
+
+/* Display styles. Only finished translations are styled. */
+bt-tr[data-bt].bt-done.bt-s-underline {
+  text-decoration: underline dashed var(--bt-accent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.25em;
+}
+
+bt-tr[data-bt].bt-done.bt-s-dotted {
+  text-decoration: underline dotted var(--bt-accent);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 0.25em;
+}
+
+bt-tr[data-bt].bt-done.bt-s-wavy {
+  text-decoration: underline wavy var(--bt-accent);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.25em;
+}
+
+bt-tr[data-bt].bt-done.bt-s-highlight {
+  background: rgba(250, 204, 21, 0.25);
+  border-radius: 2px;
+}
+
+/* Highlighter pen: only the lower half of each line is coloured. */
+bt-tr[data-bt].bt-done.bt-s-marker {
+  background: linear-gradient(transparent 55%, rgba(250, 204, 21, 0.5) 55%);
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+bt-tr[data-bt].bt-done.bt-s-background {
+  background: rgba(127, 127, 127, 0.12);
+  border-radius: 4px;
+  padding: 0.1em 0.35em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+bt-tr[data-bt].bt-done.bt-s-blockquote {
+  border-inline-start: 3px solid var(--bt-accent);
+  padding-inline-start: 0.6em;
+}
+
+bt-tr[data-bt].bt-done.bt-s-border {
+  border: 1px dashed rgba(127, 127, 127, 0.6);
+  border-radius: 4px;
+  padding: 0.2em 0.4em;
+}
+
+bt-tr[data-bt].bt-done.bt-s-italic {
+  font-style: italic;
+}
+
+bt-tr[data-bt].bt-done.bt-s-bold {
+  font-weight: 600;
+}
+
+bt-tr[data-bt].bt-done.bt-s-muted {
+  opacity: 0.7;
+}
+
+/* Learning mode: the translation stays blurred until hovered or focused. */
+bt-tr[data-bt].bt-done.bt-s-blur {
+  filter: blur(5px);
+  transition: filter 0.15s;
+}
+
+bt-tr[data-bt].bt-done.bt-s-blur:hover,
+bt-tr[data-bt].bt-done.bt-s-blur:focus-within {
+  filter: none;
+}
+
+/*
+ * Translation only. The host's own text nodes collapse with font-size 0 and its elements are
+ * hidden; the translation carries the original font-size and line-height inline, and the host
+ * its original margins in --bt-mt / --bt-mb (render.ts).
+ */
+[data-bt-only] {
+  font-size: 0 !important;
+  margin-top: var(--bt-mt, 0) !important;
+  margin-bottom: var(--bt-mb, 0) !important;
+}
+
+[data-bt-only] > :not(bt-tr[data-bt]) {
+  display: none !important;
+}
+
+[data-bt-only] > bt-tr[data-bt] {
+  display: inline;
+  margin: 0;
+}
+
+/* List bullets and numbers use the host's font-size. */
+[data-bt-only]::marker {
+  font-size: 1rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  bt-tr[data-bt].bt-loading::after {
+    animation: none;
+  }
+  bt-tr[data-bt].bt-done.bt-s-blur {
+    transition: none;
+  }
+}

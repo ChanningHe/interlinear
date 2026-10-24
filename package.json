@@ -1,0 +1,30 @@
+{
+  "name": "browser-translate",
+  "version": "0.3.0",
+  "private": true,
+  "description": "A bilingual web page translator for Chrome and Firefox that sends text only to the model you configure.",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "watch": "node scripts/build.mjs --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "coverage": "vitest run --coverage",
+    "e2e": "node scripts/build.mjs --e2e && node test/e2e/run.mjs",
+    "e2e:shortcut": "node scripts/build.mjs --e2e && node test/e2e/shortcut.mjs"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.3.5",
+    "@vitest/coverage-v8": "^5.0.5",
+    "esbuild": "^0.28.2",
+    "fake-indexeddb": "^6.2.6",
+    "happy-dom": "^21.0.4",
+    "playwright-core": "^1.64.1",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
+  }
+}
