@@ -48,6 +48,8 @@ npm run typecheck
 CHROMIUM=/path/to/chromium npm run e2e
 ```
 
+リリースするには `just release 1.2.3` を実行します。バージョンを更新し、チェックを実行してからコミットし `v1.2.3` タグを付けます。タグを push するとリリースが公開されます。
+
 ## ライセンス
 
 [MIT](LICENSE)

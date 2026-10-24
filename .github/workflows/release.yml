@@ -42,7 +42,5 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          flags=()
-          case "$GITHUB_REF_NAME" in *-*) flags+=(--prerelease) ;; esac
           gh release create "$GITHUB_REF_NAME" browser-translate-*.zip SHA256SUMS \
-            --title "$GITHUB_REF_NAME" --generate-notes --verify-tag "${flags[@]}"
+            --title "$GITHUB_REF_NAME" --generate-notes --verify-tag

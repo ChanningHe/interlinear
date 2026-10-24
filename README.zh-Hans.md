@@ -48,6 +48,8 @@ npm run typecheck
 CHROMIUM=/path/to/chromium npm run e2e
 ```
 
+发布新版本时运行 `just release 1.2.3`：它会修改版本号、运行检查、提交并打上 `v1.2.3` 标签，推送标签后会自动发布。
+
 ## 许可证
 
 [MIT](LICENSE)
