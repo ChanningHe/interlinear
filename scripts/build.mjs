@@ -33,7 +33,7 @@ function manifest(target) {
       : { scripts: ["background.js"], type: "module" };
   return {
     manifest_version: 3,
-    name: "Browser Translate",
+    name: "interlinear",
     version: pkg.version,
     description: msg("extDescription"),
     default_locale: "en",
@@ -68,7 +68,7 @@ function manifest(target) {
     ...(target === "firefox" && {
       browser_specific_settings: {
         gecko: {
-          id: "browser-translate@localhost",
+          id: "interlinear@channinghe.github.io",
           strict_min_version: "128.0",
           // Page text leaves the device, but only to the endpoint the user configures.
           data_collection_permissions: { required: ["websiteContent"] },

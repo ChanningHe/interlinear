@@ -68,7 +68,7 @@ const ctx: OptionsContext = {
   render: () => render(),
   setStatus,
   persistServices: (update) => persistServices(update),
-  tidy: () => void tidy(normalizeSettings(JSON.parse(saved))).catch((e: unknown) => console.warn("[browser-translate] tidy:", e)),
+  tidy: () => void tidy(normalizeSettings(JSON.parse(saved))).catch((e: unknown) => console.warn("[interlinear] tidy:", e)),
 };
 
 const savedSettings = () => normalizeSettings(JSON.parse(saved));
@@ -104,7 +104,7 @@ function renderChrome(): void {
       "div",
       { class: "brand" },
       h("img", { src: "icons/48.png", alt: "" }),
-      h("div", {}, h("h1", {}, "Browser Translate"), h("div", { class: "version" }, t("version", { version }))),
+      h("div", {}, h("h1", {}, "interlinear"), h("div", { class: "version" }, t("version", { version }))),
     ),
     ...SECTIONS.map((s) => h("a", { href: `#${s.id}`, "data-section": s.id }, t(s.title))),
     h("label", { class: "nav-lang", title: t("interfaceLanguage") }, icon(ICONS.globe, 15), uiLanguageSelect(ctx)),

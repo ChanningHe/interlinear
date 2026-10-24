@@ -38,7 +38,7 @@ export function createIdbCache(opts: IdbCacheOptions = {}): Cache & { prune(): P
 
   const open = () => {
     db ??= new Promise<IDBDatabase>((resolve, reject) => {
-      const req = indexedDB.open(opts.dbName ?? "browser-translate", 1);
+      const req = indexedDB.open(opts.dbName ?? "interlinear", 1);
       req.onupgradeneeded = () => req.result.createObjectStore(STORE, { keyPath: "key" }).createIndex("time", "time");
       req.onsuccess = () => resolve(req.result);
       req.onerror = () => reject(req.error);

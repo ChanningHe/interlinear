@@ -19,7 +19,7 @@ import { createPageTranslator, intersectionVisibility } from "./translator";
 // isolated world, so pages cannot see or spoof it.
 declare global {
   interface Window {
-    __browserTranslateLoaded?: true;
+    __interlinearLoaded?: true;
   }
 }
 
@@ -166,8 +166,8 @@ async function init(): Promise<void> {
   if (autoTranslate && !translator?.isActive()) await toggle();
 }
 
-if (!window.__browserTranslateLoaded) {
-  window.__browserTranslateLoaded = true;
+if (!window.__interlinearLoaded) {
+  window.__interlinearLoaded = true;
   chrome.runtime.onMessage.addListener((msg: ContentRequest, sender, sendResponse) => {
     if (sender.id !== chrome.runtime.id) return false;
     const reply = onMessage(msg);
@@ -179,5 +179,5 @@ if (!window.__browserTranslateLoaded) {
     reply.then(sendResponse, (e: unknown) => sendResponse({ ...state(), error: errorText(e) }));
     return true;
   });
-  init().catch((e: unknown) => console.warn("[browser-translate] init failed:", e));
+  init().catch((e: unknown) => console.warn("[interlinear] init failed:", e));
 }

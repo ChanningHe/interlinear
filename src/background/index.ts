@@ -38,7 +38,7 @@ import { listModels } from "../providers/models";
 import { createIdbCache } from "./cache";
 import { createTranslator, publicError } from "./translate";
 
-const log = (...args: unknown[]) => console.warn("[browser-translate]", ...args);
+const log = (...args: unknown[]) => console.warn("[interlinear]", ...args);
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
 // Defence in depth: content scripts never read storage, and now they cannot either.

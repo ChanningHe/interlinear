@@ -1,4 +1,4 @@
-# Browser Translate
+# interlinear
 
 English | [简体中文](README.zh-Hans.md) | [日本語](README.ja.md)
 

@@ -9,7 +9,7 @@ const ISSUER = "https://auth.openai.com";
 const RESOURCE = "https://api.openai.com/v1";
 const SCOPE = "openid profile email offline_access resource.invoke chatgpt.tokens.use.direct";
 const DYNAMIC_CLIENT = "dynamic_agent_client";
-const APP_NAME = "Browser Translate";
+const APP_NAME = "interlinear";
 /** OpenAI requires a 127.0.0.1 loopback callback; nothing listens there, the tab URL is read instead. */
 export const REDIRECT_URI = "http://127.0.0.1:1455/auth/callback";
 /** Refresh this long before the access token expires. */

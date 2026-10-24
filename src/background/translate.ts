@@ -85,7 +85,7 @@ export function createTranslator(deps: TranslatorDeps) {
       return await deps.cache.get(keys);
     } catch (e) {
       // The cache is an optimisation; translation must still work without it.
-      console.warn("[browser-translate] cache read failed:", e);
+      console.warn("[interlinear] cache read failed:", e);
       return keys.map(() => undefined);
     }
   }
@@ -95,7 +95,7 @@ export function createTranslator(deps: TranslatorDeps) {
     try {
       await deps.cache.set(entries);
     } catch (e) {
-      console.warn("[browser-translate] cache write failed:", e);
+      console.warn("[interlinear] cache write failed:", e);
     }
   }
 
@@ -115,7 +115,7 @@ export function createTranslator(deps: TranslatorDeps) {
         const raw = await limit(s.concurrency, () => deps.complete(provider, prompt));
         parsed = parseResponse(raw, items.length);
       } catch (e) {
-        console.warn("[browser-translate] request failed:", e);
+        console.warn("[interlinear] request failed:", e);
         // A failed request fails the whole batch; retrying item by item would multiply cost.
         return items.map(() => fail(publicError(e)));
       }

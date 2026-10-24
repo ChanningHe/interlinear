@@ -329,7 +329,7 @@ function backupRows(ctx: OptionsContext): HTMLElement[] {
   const exportFile = () => {
     const blob = new Blob([exportSettings(normalizeSettings(ctx.draft), includeKeys)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
-    h("a", { href: url, download: "browser-translate-settings.json" }).click();
+    h("a", { href: url, download: "interlinear-settings.json" }).click();
     setTimeout(() => URL.revokeObjectURL(url), 0);
   };
   const picker = h("input", { type: "file", accept: "application/json,.json", hidden: true });

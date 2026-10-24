@@ -35,12 +35,12 @@ jobs:
         run: |
           version="${GITHUB_REF_NAME#v}"
           for target in chrome firefox; do
-            (cd "dist/$target" && zip -qr -X "$GITHUB_WORKSPACE/browser-translate-$target-$version.zip" .)
+            (cd "dist/$target" && zip -qr -X "$GITHUB_WORKSPACE/interlinear-$target-$version.zip" .)
           done
-          sha256sum browser-translate-*.zip > SHA256SUMS
+          sha256sum interlinear-*.zip > SHA256SUMS
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" browser-translate-*.zip SHA256SUMS \
+          gh release create "$GITHUB_REF_NAME" interlinear-*.zip SHA256SUMS \
             --title "$GITHUB_REF_NAME" --generate-notes --verify-tag

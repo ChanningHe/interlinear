@@ -246,7 +246,7 @@ describe("ChatGPT sign-in", () => {
     expect(url.origin + url.pathname).toBe("https://auth.openai.com/api/accounts/authorize");
     expect(q).toMatchObject({
       client_id: "dynamic_agent_client",
-      agent_name_hint: "Browser Translate",
+      agent_name_hint: "interlinear",
       ext_agent_host_id: "host-1",
       redirect_uri: REDIRECT_URI,
       resource: "https://api.openai.com/v1",
