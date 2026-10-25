@@ -165,7 +165,8 @@ try {
     assert.equal(p1.href, "/target");
     assert.equal(p1.code, "npm install");
     assert.match(await page.$eval("h1 bt-tr", (el) => el.textContent), /\[ZH\] Hello World Title/);
-    assert.equal(await page.$$eval("li bt-tr.bt-done", (els) => els.length), 2);
+    // Results stream in per batch: the list may finish after #p1.
+    await page.waitForFunction(() => document.querySelectorAll("li bt-tr.bt-done").length === 2, null, { timeout: 10_000 });
     assert.ok(requests.length <= 2, `expected batching, got ${requests.length} requests`);
   });
 
@@ -354,7 +355,7 @@ try {
 
   await step("options page shows the shortcut the browser assigned", async () => {
     // macOS reports Alt shortcuts with the Option symbol.
-    await options.waitForFunction(() => ["Alt+T", "⌥T"].includes(document.querySelector("kbd")?.textContent));
+    await options.waitForFunction(() => ["Alt+Q", "⌥Q"].includes(document.querySelector("kbd")?.textContent));
     assert.ok(await options.getByRole("button", { name: "Change shortcut…" }).isVisible());
   });
 
@@ -398,12 +399,12 @@ try {
   }, helperUrl);
   await helper.bringToFront();
 
-  await step("tap Ctrl over a paragraph to translate just that paragraph", async () => {
+  await step("tap Alt over a paragraph to translate just that paragraph", async () => {
     assert.equal(await helper.$("bt-tr"), null);
     const box = await helper.locator("#p1").boundingBox();
     await helper.mouse.move(box.x + 20, box.y + box.height / 2);
-    await helper.keyboard.down("Control");
-    await helper.keyboard.up("Control");
+    await helper.keyboard.down("Alt");
+    await helper.keyboard.up("Alt");
     await helper.waitForSelector("#p1 bt-tr.bt-done", { timeout: 10_000 });
     assert.equal(await helper.$$eval("bt-tr", (els) => els.length), 1);
   });

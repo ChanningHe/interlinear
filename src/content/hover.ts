@@ -36,10 +36,17 @@ export interface HoverDeps {
   readonly requireTrusted?: boolean;
 }
 
-/** Listens for the modifier key. Returns a disposer. */
-export function installHover(deps: HoverDeps): () => void {
+/**
+ * Disposes the listeners. `cancelTap` ends the current press without translating: a browser
+ * shortcut on the same modifier (Alt+Q) hides its letter from the page, so the page alone would
+ * see Alt pressed and released, which is a tap.
+ */
+export type HoverHandle = (() => void) & { readonly cancelTap: () => void };
+
+/** Listens for the modifier key. */
+export function installHover(deps: HoverDeps): HoverHandle {
   const { modifier } = deps;
-  if (modifier === "off") return () => {};
+  if (modifier === "off") return Object.assign(() => {}, { cancelTap: () => {} });
   const doc = deps.doc ?? document;
   const getHovered = deps.getHovered ?? (() => hoveredElement(doc));
   const requireTrusted = deps.requireTrusted ?? true;
@@ -57,7 +64,10 @@ export function installHover(deps: HoverDeps): () => void {
     const tapped = clean;
     clean = false;
     const el = tapped ? getHovered() : undefined;
-    if (el) deps.onTarget(el);
+    if (!el) return;
+    // A lone Alt also focuses the browser's menu (Windows) or shows Firefox's menu bar.
+    e.preventDefault();
+    deps.onTarget(el);
   };
   const breakChord = () => {
     clean = false;
@@ -76,5 +86,5 @@ export function installHover(deps: HoverDeps): () => void {
     ["mouseover", onMouseOver as EventListener],
   ];
   listeners.forEach(([type, fn]) => doc.addEventListener(type, fn, true));
-  return () => listeners.forEach(([type, fn]) => doc.removeEventListener(type, fn, true));
+  return Object.assign(() => listeners.forEach(([type, fn]) => doc.removeEventListener(type, fn, true)), { cancelTap: breakChord });
 }

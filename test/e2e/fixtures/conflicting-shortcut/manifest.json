@@ -1,9 +1,9 @@
 {
   "manifest_version": 3,
-  "name": "E2E fixture: claims Alt+T",
+  "name": "E2E fixture: claims Alt+Q",
   "version": "1.0",
   "background": { "service_worker": "sw.js" },
   "commands": {
-    "other": { "suggested_key": { "default": "Alt+T" }, "description": "Takes our default shortcut first" }
+    "other": { "suggested_key": { "default": "Alt+Q" }, "description": "Takes our default shortcut first" }
   }
 }

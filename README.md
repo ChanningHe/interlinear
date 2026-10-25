@@ -9,7 +9,7 @@ A bilingual web page translator for Chrome and Firefox that sends text only to t
 - Bilingual or translation-only view. Translations appear under each paragraph and keep links and inline formatting.
 - Translates the main content and leaves navigation, ads, tooltips, usernames and timestamps alone.
 - Translates as you scroll, picks up content that loads later, and restores the original page exactly.
-- Translate one paragraph (tap Ctrl over it), selected text, or what you typed in a text field (press Space three times).
+- Translate one paragraph (tap Alt, or Option on a Mac, over it), selected text, or what you typed in a text field (press Space three times).
 - Works with OpenRouter, OpenAI, Anthropic, Gemini, DeepSeek, Ollama, LM Studio and any OpenAI- or Anthropic-compatible endpoint, or sign in with ChatGPT to use your plan.
 - Per-service settings tuned for translation, such as reasoning effort and OpenRouter provider preferences.
 - Glossary, custom instructions, 13 translation styles and sites that are always translated.
@@ -36,7 +36,7 @@ This writes `dist/chrome` and `dist/firefox`, which you load the same way.
 
 The settings page opens after installing. Add a service, connect it with an API key, a ChatGPT sign-in or a local server, pick a model and run Test.
 
-Press Alt+T to translate a page or show the original again, Alt+O to switch between bilingual and translation-only, and Alt+P to translate the paragraph under the pointer. You can change these keys in the settings.
+Press Alt+Q to translate a page or show the original again, Alt+O to switch between bilingual and translation-only, and Alt+P to translate the paragraph under the pointer. You can change these keys in the settings.
 
 For Ollama, set `OLLAMA_ORIGINS=chrome-extension://*,moz-extension://*` and restart it if requests are rejected.
 

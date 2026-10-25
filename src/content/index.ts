@@ -11,7 +11,7 @@ import {
   type TranslateResult,
   type TranslateStreamMessage,
 } from "../shared/messages";
-import { installHover, hoveredElement } from "./hover";
+import { installHover, hoveredElement, type HoverHandle } from "./hover";
 import { installTripleSpace, translateField, type Field } from "./input";
 import { chromeDetector, createLanguageFilter } from "./lang";
 import { createPopover, type Popover } from "./popover";
@@ -34,6 +34,7 @@ let config: PageConfig | undefined;
 /** Display mode chosen on this page (shortcut or popup); survives toggling translation off and on. */
 let pageMode: DisplayMode | undefined;
 let popover: Popover | undefined;
+let hover: HoverHandle | undefined;
 
 function send<T>(msg: BackgroundRequest): Promise<T> {
   return chrome.runtime.sendMessage<BackgroundRequest, T>(msg);
@@ -173,7 +174,7 @@ async function translateInput(field: Field, c: PageConfig): Promise<void> {
 
 /** Hover, selection and input helpers. They only ever act on real (trusted) user input. */
 function installHelpers(c: PageConfig): void {
-  installHover({ modifier: c.hoverModifier, onTarget: (el) => void translateHovered(el) });
+  hover = installHover({ modifier: c.hoverModifier, onTarget: (el) => void translateHovered(el) });
   if (c.selectionButton) {
     installSelectionButton({ popover: getPopover(c), onTranslate: (text, anchor) => void translateSelection(text, anchor) });
   }
@@ -181,6 +182,8 @@ function installHelpers(c: PageConfig): void {
 }
 
 function onMessage(msg: ContentRequest): Promise<TabState> | TabState | undefined {
+  // Keyboard commands (Alt+Q…) arrive while their modifier is still held: not a hover tap.
+  if (msg?.type !== "state") hover?.cancelTap();
   switch (msg?.type) {
     case "state":
       return state();

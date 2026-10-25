@@ -52,7 +52,7 @@ function manifest(target) {
       // a command without a shortcut when its default is taken: Alt+A/W/I/S are common in other
       // translation extensions, and Alt+Shift+T / Alt+Shift+A are reserved by Chrome itself.
       "toggle-translation": {
-        suggested_key: { default: "Alt+T" },
+        suggested_key: { default: "Alt+Q" },
         description: msg("cmdToggle"),
       },
       "toggle-display-mode": {

@@ -69,6 +69,34 @@ describe("hover translation", () => {
     expect(onTarget.mock.calls.map(([el]) => el.id)).toEqual(["a"]);
   });
 
+  test("Alt held for a browser shortcut (Alt+Q) is not a tap: the page never sees the Q", () => {
+    document.body.innerHTML = "<p id='p'>Text</p>";
+    const onTarget = vi.fn();
+    const hover = installHover({ modifier: "alt", onTarget, getHovered: () => document.body, requireTrusted: false });
+    disposers.push(hover);
+    document.dispatchEvent(key("Alt", { altKey: true }));
+    hover.cancelTap(); // the shortcut's command reached the page while Alt was down
+    document.dispatchEvent(up("Alt"));
+    expect(onTarget).not.toHaveBeenCalled();
+    tap("Alt", { altKey: true });
+    expect(onTarget).toHaveBeenCalledTimes(1);
+  });
+
+  test("a tap of Alt that translates keeps the browser from focusing its menu", () => {
+    document.body.innerHTML = "<p id='p'>Text</p>";
+    let hovered: Element | undefined = document.body;
+    disposers.push(installHover({ modifier: "alt", onTarget: () => {}, getHovered: () => hovered, requireTrusted: false }));
+    const release = () => {
+      document.dispatchEvent(key("Alt", { altKey: true }));
+      const e = new KeyboardEvent("keyup", { key: "Alt", bubbles: true, cancelable: true });
+      document.dispatchEvent(e);
+      return e.defaultPrevented;
+    };
+    expect(release()).toBe(true);
+    hovered = undefined; // nothing under the pointer: Alt keeps its usual meaning
+    expect(release()).toBe(false);
+  });
+
   test("synthetic events are ignored and 'off' installs nothing", () => {
     document.body.innerHTML = "<p id='p'>Text</p>";
     const onTarget = vi.fn();

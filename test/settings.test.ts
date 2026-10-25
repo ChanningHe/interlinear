@@ -111,13 +111,13 @@ describe("new settings fields", () => {
     expect(s.everywhere).toBe(false);
     expect(s.autoSites).toEqual([]);
     expect(s.pageContext).toBe(false);
-    expect(s.hoverModifier).toBe("ctrl");
+    expect(s.hoverModifier).toBe("alt");
     expect(s.inputTargetLang).toBe("en");
   });
 
   test("rejects unknown enum values and wrong types", () => {
     const s = normalizeSettings({ displayMode: "both", hoverModifier: "meta", everywhere: "yes", inputTargetLang: "xx", style: "neon" });
-    expect(s).toMatchObject({ displayMode: "bilingual", hoverModifier: "ctrl", everywhere: false, inputTargetLang: "en", style: "plain" });
+    expect(s).toMatchObject({ displayMode: "bilingual", hoverModifier: "alt", everywhere: false, inputTargetLang: "en", style: "plain" });
   });
 
   test("accepts every documented display style", () => {

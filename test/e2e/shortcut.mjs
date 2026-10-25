@@ -54,7 +54,7 @@ try {
   await page.goto(`http://127.0.0.1:${port}/page.html`);
   await page.bringToFront();
   await page.click("p"); // keyboard focus in the browser window
-  const keys = command.shortcut.toLowerCase(); // "Alt+T" -> xdotool "alt+t"
+  const keys = command.shortcut.toLowerCase(); // "Alt+Q" -> xdotool "alt+q"
 
   execFileSync("xdotool", ["key", "--clearmodifiers", keys]);
   await page.waitForSelector("bt-tr.bt-done", { timeout: 5000 });

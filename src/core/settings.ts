@@ -95,7 +95,7 @@ export const DEFAULT_SETTINGS: Settings = {
   scope: "content",
   autoSites: [],
   everywhere: false,
-  hoverModifier: "ctrl",
+  hoverModifier: "alt",
   inputTranslation: true,
   inputTargetLang: "en",
   selectionButton: true,
