@@ -34,11 +34,13 @@ const PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>
 
 /** Layouts that hide or move translations: a clamped preview, a fallback <object>, a component. */
 const LAYOUT_PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Layout</title>
-<style>.clamped { width: 300px; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden } .clamped p { display: inline }</style>
+<style>:not(:defined) { visibility: hidden } /* sites hide undefined custom elements while loading */
+.clamped { width: 300px; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden } .clamped p { display: inline }</style>
 </head><body style="font:16px/1.5 sans-serif;max-width:640px;margin:24px auto">
   <div id="feed"><div id="clamp" class="clamped"><p>A long preview of a forum post that the site cuts off after two lines, so anything appended after it would never be seen by the reader at all.</p></div></div>
   <div id="feed2"><div id="clamp2" class="clamped"><p><img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" width="12" height="12" alt=""> A preview with a picture in it, long enough that the site cuts it off after two lines of text for every reader.</p></div></div>
   <div style="display: flex; width: 300px"><a id="oneline" href="/c" style="display: block; height: 1.5em; overflow: hidden; white-space: nowrap; text-overflow: ellipsis">Merge branch with a long commit message that cannot fit in one line</a></div>
+  <div id="ovcard" style="position: relative; width: 300px"><p id="under" style="pointer-events: none">Text beneath a link that covers the whole card</p><a href="/post" style="position: absolute; inset: 0"></a></div>
   <div id="pane" style="height: 60px; overflow: auto; width: 300px"><p>A paragraph in a scrolling pane that runs past the bottom edge of the pane, which the reader can scroll to and read in full.</p></div>
   <p id="obj">See <object role="none"><a href="/guide">the setup guide</a></object> for every detail.</p>
   <x-card id="card"><span slot="title">Slotted card title words</span>Unslotted counter words here</x-card>
@@ -276,7 +278,9 @@ try {
       );
     await layout.bringToFront();
     await send({ type: "toggle-tab" });
-    await layout.waitForFunction(() => document.querySelectorAll("bt-tr.bt-done").length >= 7, null, { timeout: 10_000 });
+    await layout.waitForFunction(() => document.querySelectorAll("bt-tr.bt-done").length >= 8, null, { timeout: 10_000 });
+    // The page hides undefined custom elements; ours stay visible.
+    assert.equal(await layout.evaluate(() => [...document.querySelectorAll("bt-tr.bt-done")].filter((t) => getComputedStyle(t).visibility !== "visible").length), 0);
     await layout.waitForTimeout(300); // translations are measured for clipping on the next frame
 
     // A translation the clamped preview would cut off is moved after it, clamped to two lines.
@@ -337,6 +341,24 @@ try {
     await send({ type: "set-mode", mode: "bilingual" });
     await send({ type: "toggle-tab" });
     assert.equal(await layout.$("bt-tr, [data-bt-only]"), null);
+
+    // Tapping Alt over a card that a transparent link covers translates the text beneath it.
+    await layout.locator("#under").scrollIntoViewIfNeeded();
+    const under = await layout.locator("#under").boundingBox();
+    await layout.mouse.move(under.x + 20, under.y + under.height / 2);
+    await layout.keyboard.down("Alt");
+    await layout.keyboard.up("Alt");
+    await layout.waitForSelector("#under bt-tr.bt-done", { timeout: 10_000 });
+    // The selection button shows despite the rule that hides undefined custom elements.
+    await layout.locator("#obj").scrollIntoViewIfNeeded();
+    const obj = await layout.locator("#obj").boundingBox();
+    await layout.mouse.move(obj.x + 2, obj.y + obj.height / 2);
+    await layout.mouse.down();
+    await layout.mouse.move(obj.x + 120, obj.y + obj.height / 2, { steps: 5 });
+    await layout.mouse.up();
+    await layout.waitForFunction(() => { const p = document.querySelector("bt-popover"); return p !== null && getComputedStyle(p).visibility === "visible"; }, null, { timeout: 5_000 });
+    await send({ type: "toggle-tab" }); // the hover translation turned the page's translator on
+    await send({ type: "toggle-tab" });
     await layout.close();
     await page.bringToFront();
   });

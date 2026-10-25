@@ -11,7 +11,7 @@ import {
   type TranslateResult,
   type TranslateStreamMessage,
 } from "../shared/messages";
-import { installHover, hoveredElement, type HoverHandle } from "./hover";
+import { installHover, trackPointer, type HoverHandle } from "./hover";
 import { installTripleSpace, translateField, type Field } from "./input";
 import { chromeDetector, createLanguageFilter } from "./lang";
 import { createPopover, type Popover } from "./popover";
@@ -35,6 +35,8 @@ let config: PageConfig | undefined;
 let pageMode: DisplayMode | undefined;
 let popover: Popover | undefined;
 let hover: HoverHandle | undefined;
+/** Finds the paragraph under the mouse for the hover key and the shortcut, beneath overlays. */
+const pointer = trackPointer();
 
 function send<T>(msg: BackgroundRequest): Promise<T> {
   return chrome.runtime.sendMessage<BackgroundRequest, T>(msg);
@@ -144,7 +146,7 @@ function setMode(mode: DisplayMode): TabState {
   return state();
 }
 
-async function translateHovered(target = hoveredElement()): Promise<void> {
+async function translateHovered(target = pointer.target()): Promise<void> {
   if (target) (await ensureTranslator()).translateRegion(target);
 }
 
@@ -174,7 +176,7 @@ async function translateInput(field: Field, c: PageConfig): Promise<void> {
 
 /** Hover, selection and input helpers. They only ever act on real (trusted) user input. */
 function installHelpers(c: PageConfig): void {
-  hover = installHover({ modifier: c.hoverModifier, onTarget: (el) => void translateHovered(el) });
+  hover = installHover({ modifier: c.hoverModifier, onTarget: (el) => void translateHovered(el), getHovered: pointer.target });
   if (c.selectionButton) {
     installSelectionButton({ popover: getPopover(c), onTranslate: (text, anchor) => void translateSelection(text, anchor) });
   }

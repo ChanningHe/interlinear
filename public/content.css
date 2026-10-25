@@ -1,4 +1,14 @@
-/* Injected only into pages the user chose to translate. Everything is scoped to bt-tr[data-bt]. */
+/* Injected with content.js. Every rule targets our own elements (bt-tr, bt-popover) or the hosts we mark. */
+
+/*
+ * Our elements are custom elements nobody defines (content scripts cannot), and some sites hide
+ * every undefined one while their components load: `:not(:defined) { visibility: hidden }`.
+ * `inherit` keeps us exactly as visible as where we are placed, so text a page hides stays hidden.
+ */
+bt-tr[data-bt],
+bt-popover[data-bt] {
+  visibility: inherit !important;
+}
 
 bt-tr[data-bt] {
   --bt-accent: #2563eb;

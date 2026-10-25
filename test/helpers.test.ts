@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { installHover, onlyModifier } from "../src/content/hover";
+import { installHover, onlyModifier, textElementAt } from "../src/content/hover";
 import { editableField, installTripleSpace, readField, translateField, writeField } from "../src/content/input";
 import { createPopover, place } from "../src/content/popover";
 import { installSelectionButton, selectedText } from "../src/content/selection";
@@ -95,6 +95,34 @@ describe("hover translation", () => {
     expect(release()).toBe(true);
     hovered = undefined; // nothing under the pointer: Alt keeps its usual meaning
     expect(release()).toBe(false);
+  });
+
+  test("the paragraph under a transparent overlay link is found by its text, not the overlay", () => {
+    // Feed cards cover themselves with an empty link so a click anywhere opens the post.
+    document.body.innerHTML = "<div id='card'><p id='p'>Post body text</p><a id='overlay' href='/post'></a></div>";
+    const p = document.getElementById("p")!;
+    const overlay = document.getElementById("overlay")!;
+    const stack = (x: number) => (x < 300 ? [overlay, p, document.getElementById("card")!, document.body] : [document.body]);
+    const doc = Object.assign(Object.create(document), { elementsFromPoint: stack }) as Document;
+    const laidOut = (n: Node) => (n.parentElement === p ? [new DOMRect(0, 0, 200, 20)] : []);
+    expect(textElementAt(10, 30, doc, laidOut)).toBe(p); // between two lines of the paragraph, too
+    expect(textElementAt(500, 500, doc, laidOut)).toBeUndefined(); // nothing with text there
+    expect(textElementAt(10, 30, doc, () => [])).toBeUndefined(); // text that is not laid out
+  });
+
+  test("text that ignores the pointer (pointer-events: none) is found by where it is inside what was hit", () => {
+    // Hit testing skips such elements, so only the overlay and the card's wrapper are reported.
+    document.body.innerHTML = "<div id='wrap'><div id='preview'><p id='p'>Post body text</p></div></div><a id='overlay' href='/post'></a>";
+    const p = document.getElementById("p")!;
+    p.getBoundingClientRect = () => new DOMRect(0, 0, 200, 40);
+    document.getElementById("preview")!.getBoundingClientRect = () => new DOMRect(0, 0, 300, 60);
+    const doc = Object.assign(Object.create(document), {
+      elementsFromPoint: () => [document.getElementById("overlay")!, document.getElementById("wrap")!, document.body],
+      createTreeWalker: document.createTreeWalker.bind(document),
+    }) as Document;
+    const laidOut = (n: Node) => (n.parentElement === p ? [new DOMRect(0, 0, 200, 20)] : []);
+    expect(textElementAt(10, 30, doc, laidOut)).toBe(p);
+    expect(textElementAt(250, 30, doc, laidOut)).toBeUndefined(); // outside the paragraph's box
   });
 
   test("synthetic events are ignored and 'off' installs nothing", () => {
