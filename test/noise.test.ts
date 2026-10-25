@@ -279,3 +279,41 @@ describe("translator follow-ups (review findings)", () => {
     expect(document.getElementById("text")!.hasAttribute("data-bt-only")).toBe(true);
   });
 });
+
+describe("menus of short links are page chrome", () => {
+  test("tab bars, footer link rows and tag lists without landmarks are skipped in the content scope", () => {
+    const html = `
+      <ul class="nav-pills"><li><a href="/latest">Latest</a></li><li><a href="/hot">Hot</a></li><li><a href="/top">Top</a></li></ul>
+      <div class="footer-ish"><a href="/help"><p>Help</p></a><a href="/status"><p>Status</p></a><a href="/about"><p>About us</p></a><a href="/press"><p>Press</p></a></div>
+      <div class="tags"><a href="/t/1">Developer Tools</a> · <a href="/t/2">Social Media</a> · <a href="/t/3">Twitter</a></div>
+      <p>Body text of the page that a reader came for</p>`;
+    expect(texts(html, true)).toEqual(["Body text of the page that a reader came for"]);
+    expect(texts(html)).toContain("Latest"); // whole-page scope still translates them
+  });
+
+  test("links inside a sentence, a list of headlines and two links alone are content", () => {
+    const html = `
+      <p>See <a href="/a">the guide</a>, <a href="/b">the FAQ</a> and <a href="/c">the forum</a> for more.</p>
+      <ul><li><a href="/1">Why Lean is faster than Rust in practice</a></li><li><a href="/2">Docker is weird, and that is fine</a></li><li><a href="/3">It is still OK to enjoy programming</a></li></ul>
+      <div><a href="/x">Previous post</a><a href="/y">Next post</a></div>`;
+    expect(texts(html, true)).toEqual([
+      "See the guide , the FAQ and the forum for more.",
+      "Why Lean is faster than Rust in practice",
+      "Docker is weird, and that is fine",
+      "It is still OK to enjoy programming",
+      "Previous post Next post",
+    ]);
+  });
+
+  test("links listed with commas are prose (an infobox value), not a menu", () => {
+    const html = `<table><tr><th>Components</th><td><a href="/f">Frame</a>, <a href="/w">wheels</a>, <a href="/t">tires</a>, <a href="/s">saddle</a></td></tr></table>`;
+    expect(texts(html, true)).toEqual(["Components", "Frame , wheels , tires , saddle"]);
+  });
+
+  test("an item mixing a link with other text, or a short item without a link, is not a menu", () => {
+    const html = `
+      <ul><li><a href="/u/1">alice</a> wrote this</li><li><a href="/u/2">bob</a> replied</li><li><a href="/u/3">carol</a> agreed</li></ul>
+      <ul><li>Apples</li><li>Pears</li><li>Plums</li></ul>`;
+    expect(texts(html, true)).toEqual(["alice wrote this", "bob replied", "carol agreed", "Apples", "Pears", "Plums"]);
+  });
+});

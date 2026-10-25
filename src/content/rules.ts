@@ -156,10 +156,51 @@ function isControlLabel(el: Element): boolean {
   return (el.textContent ?? "").trim().length <= MAX_BUTTON_LABEL;
 }
 
-/** Navigation, page header and footer, toolbars and control labels. */
+/** A row or list of this many short links or more is a menu, whatever its markup. */
+const MENU_MIN_ITEMS = 3;
+const MENU_ITEM_MAX_CHARS = 30;
+const MENU_ITEM_MAX_WORDS = 3;
+const LETTER_RE = /\p{L}/u;
+/** Commas and semicolons between links make a list in prose ("Frame, wheels, tires"), not a menu. */
+const PROSE_SEPARATOR_RE = /[,;，；、]/;
+
+/** The text of `el` when all of it is the text of one link; undefined otherwise. */
+function linkLabel(el: Element): string | undefined {
+  const link = el.matches("a[href]") ? el : el.querySelectorAll("a[href]").length === 1 ? el.querySelector("a[href]") : null;
+  const text = (el.textContent ?? "").trim();
+  return link && (link.textContent ?? "").trim() === text ? text : undefined;
+}
+
+/**
+ * Site navigation built without landmarks: tab bars, footer link rows, breadcrumbs, tag lists.
+ * Every child that has letters is one short link, and the container has no text of its own;
+ * links in a sentence, headline lists and items with more than a link are content.
+ */
+export function isLinkMenu(el: Element): boolean {
+  if (el.children.length < MENU_MIN_ITEMS) return false;
+  for (const n of el.childNodes) {
+    if (n.nodeType !== Node.TEXT_NODE) continue;
+    const text = n.nodeValue ?? "";
+    if (LETTER_RE.test(text) || PROSE_SEPARATOR_RE.test(text)) return false;
+  }
+  let items = 0;
+  for (const child of el.children) {
+    const label = linkLabel(child);
+    if (label === undefined) {
+      if (LETTER_RE.test(child.textContent ?? "")) return false; // an item that is not just a link
+      continue; // icons, separators
+    }
+    if (label.length > MENU_ITEM_MAX_CHARS || label.split(/\s+/).length > MENU_ITEM_MAX_WORDS) return false;
+    if (LETTER_RE.test(label)) items++;
+  }
+  return items >= MENU_MIN_ITEMS;
+}
+
+/** Navigation, page header and footer, toolbars, link menus and control labels. */
 export function isChrome(el: Element): boolean {
   const role = el.getAttribute("role");
   if (el.localName === "nav" || (role !== null && CHROME_ROLES.has(role))) return true;
+  if (isLinkMenu(el)) return true;
   if (el.localName === "button" || role === "button") return isControlLabel(el);
   // header/footer are page landmarks only outside sectioning content (HTML-AAM). A header that
   // carries the page's title is the start of the content on pages without <article>.
