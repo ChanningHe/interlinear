@@ -1,6 +1,6 @@
 {
   "name": "interlinear",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "private": true,
   "description": "A bilingual web page translator for Chrome and Firefox that sends text only to the model you configure.",
   "license": "MIT",
