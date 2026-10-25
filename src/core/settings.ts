@@ -48,9 +48,8 @@ export interface Settings {
   /** Hover, input-box and selection helpers on every site (needs all-sites access). */
   readonly everywhere: boolean;
   readonly hoverModifier: HoverModifier;
-  /** Triple-space inside a text field translates its contents into inputTargetLang. */
+  /** Triple-space inside a text field translates its contents into the page's language. */
   readonly inputTranslation: boolean;
-  readonly inputTargetLang: string;
   /** Show a translate button next to selected text on pages where the helpers run. */
   readonly selectionButton: boolean;
   readonly glossary: readonly GlossaryEntry[];
@@ -97,7 +96,6 @@ export const DEFAULT_SETTINGS: Settings = {
   everywhere: false,
   hoverModifier: "alt",
   inputTranslation: true,
-  inputTargetLang: "en",
   selectionButton: true,
   glossary: [],
   pageContext: false,
@@ -240,7 +238,6 @@ export function normalizeSettings(raw: unknown): Settings {
     everywhere: bool(raw.everywhere, d.everywhere),
     hoverModifier: oneOf(raw.hoverModifier, HOVER_MODIFIERS, d.hoverModifier),
     inputTranslation: bool(raw.inputTranslation, d.inputTranslation),
-    inputTargetLang: lang(raw.inputTargetLang, d.inputTargetLang),
     selectionButton: bool(raw.selectionButton, d.selectionButton),
     glossary: normalizeGlossary(raw.glossary),
     pageContext: bool(raw.pageContext, d.pageContext),

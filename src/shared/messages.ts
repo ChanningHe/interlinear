@@ -15,7 +15,6 @@ export interface PageConfig {
   readonly maxItemsPerBatch: number;
   readonly hoverModifier: HoverModifier;
   readonly inputTranslation: boolean;
-  readonly inputTargetLang: string;
   readonly selectionButton: boolean;
   readonly pageContext: boolean;
   /** In-page button and popover texts in the interface language. */

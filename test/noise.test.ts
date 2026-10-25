@@ -138,7 +138,6 @@ const config: PageConfig = {
   maxItemsPerBatch: 20,
   hoverModifier: "ctrl",
   inputTranslation: true,
-  inputTargetLang: "en",
   selectionButton: true,
   pageContext: false,
   labels: contentLabels("en"),

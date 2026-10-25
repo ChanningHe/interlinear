@@ -108,7 +108,6 @@ export const ja: Messages = {
   selectionButtonDesc: "テキストを選択すると横に翻訳ボタンを表示します。",
   inputTranslation: "入力欄の翻訳",
   inputTranslationDesc: "入力欄でスペースを 3 回押すと、入力した文章を翻訳します。",
-  inputTarget: "入力の翻訳先",
   everywhere: "すべてのサイトで有効にする",
   hoverParagraphDesc: "段落にポインタを合わせてこのキーを軽く押すか、押したまま段落の上を動かします。ショートカット {shortcut} でも同じです。",
   helpersNeedAccess: "以下の機能は、すべてのサイトで有効にしてから使えます。",

@@ -249,11 +249,6 @@ function helpersSection(ctx: OptionsContext): Node[] {
       ),
       settingRow(t("selectionButton"), t("selectionButtonDesc"), switchInput(draft.selectionButton, (v) => ctx.patch({ selectionButton: v }), t("selectionButton"))),
       settingRow(t("inputTranslation"), t("inputTranslationDesc"), switchInput(draft.inputTranslation, (v) => ctx.patch({ inputTranslation: v }), t("inputTranslation"))),
-      settingRow(
-        t("inputTarget"),
-        null,
-        selectInput(draft.inputTargetLang, languageOptions(ctx.ui), (v) => ctx.patch({ inputTargetLang: v }), { "aria-label": t("inputTarget") }),
-      ),
     ),
   ];
 }

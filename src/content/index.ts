@@ -13,7 +13,7 @@ import {
 } from "../shared/messages";
 import { installHover, trackPointer, type HoverHandle } from "./hover";
 import { installTripleSpace, translateField, type Field } from "./input";
-import { chromeDetector, createLanguageFilter } from "./lang";
+import { chromeDetector, createLanguageFilter, inputLanguage } from "./lang";
 import { createPopover, type Popover } from "./popover";
 import { installSelectionButton, selectionRect } from "./selection";
 import { createPageTranslator, intersectionVisibility, type PageTranslateOptions } from "./translator";
@@ -159,13 +159,19 @@ async function translateSelection(text: string, anchor = selectionRect()): Promi
   pop.showResult(rect, r.ok ? { state: "text", text: r.text } : { state: "error", message: r.error });
 }
 
+/** Characters of page text sampled when the page does not say what language it is in. */
+const LANGUAGE_SAMPLE = 1000;
+
 async function translateInput(field: Field, c: PageConfig): Promise<void> {
   const pop = getPopover(c);
   const rect = field.getBoundingClientRect();
   pop.showResult(rect, { state: "loading" });
+  // Looked up each time: a single-page app can change language without a reload.
+  const sample = (document.querySelector<HTMLElement>("main, article") ?? document.body)?.innerText.slice(0, LANGUAGE_SAMPLE) ?? "";
+  const into = await inputLanguage(c.targetLang, document.documentElement.lang, sample, chromeDetector);
   let failed = false;
   await translateField(field, {
-    translate: (text) => translateOne(text, c.inputTargetLang),
+    translate: (text) => translateOne(text, into),
     onError: (message) => {
       failed = true;
       pop.showResult(rect, { state: "error", message });

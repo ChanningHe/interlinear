@@ -74,7 +74,6 @@ function pageConfig(s: Settings): PageConfig {
     maxItemsPerBatch: s.maxItemsPerBatch,
     hoverModifier: s.hoverModifier,
     inputTranslation: s.inputTranslation,
-    inputTargetLang: s.inputTargetLang,
     selectionButton: s.selectionButton,
     pageContext: s.pageContext,
     labels: contentLabels(uiLanguage(s)),

@@ -108,7 +108,6 @@ export const zhHant: Messages = {
   selectionButtonDesc: "選取文字後在旁邊顯示翻譯按鈕。",
   inputTranslation: "輸入框翻譯",
   inputTranslationDesc: "在輸入框中連按三次空白鍵，翻譯你輸入的內容。",
-  inputTarget: "輸入內容翻譯成",
   everywhere: "在所有網站啟用",
   hoverParagraphDesc: "滑鼠指向段落時輕按此鍵，或按住並劃過多個段落。也可以按快速鍵 {shortcut}。",
   helpersNeedAccess: "以下功能需要在所有網站啟用後才能使用。",

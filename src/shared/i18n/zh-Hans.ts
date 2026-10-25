@@ -108,7 +108,6 @@ export const zhHans: Messages = {
   selectionButtonDesc: "选中文字后在旁边显示翻译按钮。",
   inputTranslation: "输入框翻译",
   inputTranslationDesc: "在输入框中连按三次空格，翻译你输入的内容。",
-  inputTarget: "输入内容翻译成",
   everywhere: "在所有网站启用",
   hoverParagraphDesc: "鼠标指向段落时轻按此键，或按住并划过多个段落。也可以按快捷键 {shortcut}。",
   helpersNeedAccess: "以下功能需要在所有网站启用后才能使用。",

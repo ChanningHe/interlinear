@@ -43,12 +43,17 @@ export function chineseScript(code: string): ChineseScript | undefined {
   return parts.some((p) => TRADITIONAL_REGIONS.has(p)) ? "zh-Hant" : "zh-Hans";
 }
 
-/** The supported language closest to a browser locale ("de-DE" → "de", "zh-TW" → "zh-Hant"); English otherwise. */
-export function languageForLocale(locale: string): string {
-  const script = chineseScript(locale);
+/** The supported language a tag names ("de-DE" → "de", "zh-TW" → "zh-Hant"); undefined if none. */
+export function supportedLanguage(tag: string): string | undefined {
+  const script = chineseScript(tag);
   if (script) return script;
-  const primary = locale.toLowerCase().split(/[-_]/)[0] ?? "";
-  return isKnownLanguage(primary) ? primary : "en";
+  const primary = tag.toLowerCase().split(/[-_]/)[0] ?? "";
+  return isKnownLanguage(primary) ? primary : undefined;
+}
+
+/** The supported language closest to a browser locale; English when there is none. */
+export function languageForLocale(locale: string): string {
+  return supportedLanguage(locale) ?? "en";
 }
 
 export function languageName(code: string): string {

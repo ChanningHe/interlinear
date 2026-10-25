@@ -1,4 +1,4 @@
-import { chineseScript } from "../shared/languages";
+import { chineseScript, supportedLanguage } from "../shared/languages";
 
 // Decides whether a paragraph is already in the target language, entirely on-device.
 
@@ -32,6 +32,20 @@ export function createLanguageFilter(targetLang: string, detect: Detector, pageL
     // Short text is rarely detected reliably; fall back to the page's declared language.
     return pageHint === target;
   };
+}
+
+/**
+ * Language typed text is translated into: the page's own (what it declares, else what its text
+ * reliably reads as), since replies go to the people reading that page. English when the page is
+ * in the reader's own language or cannot be told.
+ */
+export async function inputLanguage(targetLang: string, pageLang: string, pageText: string, detect: Detector): Promise<string> {
+  let page = supportedLanguage(pageLang);
+  if (!page && pageText) {
+    const detection = await detect(pageText).catch(() => undefined);
+    page = detection?.reliable ? supportedLanguage(detection.language) : undefined;
+  }
+  return page && normalizeLang(page) !== normalizeLang(targetLang) ? page : "en";
 }
 
 /** Browser-provided detector (CLD, runs locally). */

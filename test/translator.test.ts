@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { createLanguageFilter, normalizeLang } from "../src/content/lang";
+import { createLanguageFilter, inputLanguage, normalizeLang } from "../src/content/lang";
 import { createPageTranslator, type Visibility } from "../src/content/translator";
 import { contentLabels } from "../src/shared/i18n";
 import type { PageConfig, TranslateResult } from "../src/shared/messages";
@@ -13,7 +13,6 @@ const config: PageConfig = {
   maxItemsPerBatch: 20,
   hoverModifier: "ctrl",
   inputTranslation: true,
-  inputTargetLang: "en",
   selectionButton: true,
   pageContext: false,
   labels: contentLabels("en"),
@@ -413,3 +412,27 @@ describe("translation-only stays put while the page changes", () => {
     expect(upper).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("input box translation goes into the page's language", () => {
+  const detects = (language: string | undefined, reliable = true) => async () => (language ? { language, reliable } : undefined);
+
+  test("the language the page declares, as a supported language", async () => {
+    expect(await inputLanguage("zh-Hans", "en-US", "", detects(undefined))).toBe("en");
+    expect(await inputLanguage("zh-Hans", "ja", "", detects(undefined))).toBe("ja");
+    expect(await inputLanguage("en", "zh-TW", "", detects(undefined))).toBe("zh-Hant");
+  });
+
+  test("without a usable declaration, what the page text reliably reads as", async () => {
+    expect(await inputLanguage("zh-Hans", "", "Bonjour à tous", detects("fr"))).toBe("fr");
+    expect(await inputLanguage("zh-Hans", "x-klingon", "Hallo zusammen", detects("de"))).toBe("de");
+    expect(await inputLanguage("zh-Hans", "", "?", detects("fr", false))).toBe("en"); // not reliable
+  });
+
+  test("English when the page is in the reader's own language or cannot be told", async () => {
+    expect(await inputLanguage("zh-Hans", "zh-CN", "", detects(undefined))).toBe("en");
+    expect(await inputLanguage("ja", "", "日本語のページ", detects("ja"))).toBe("en");
+    expect(await inputLanguage("zh-Hans", "", "", detects(undefined))).toBe("en");
+    expect(await inputLanguage("zh-Hans", "", "text", async () => { throw new Error("no detector"); })).toBe("en");
+  });
+});
+
