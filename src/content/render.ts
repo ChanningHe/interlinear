@@ -1,6 +1,6 @@
 import type { DisplayStyle } from "../core/settings";
 import type { Unit } from "./dom";
-import { MEDIA_TAGS, OWN_ATTR, isDropped } from "./rules";
+import { MEDIA_TAGS, OWN_ATTR, isDropped, isMedia } from "./rules";
 import { deserialize, isEmojiImage, plainText } from "./serialize";
 
 // Every translation is one <bt-tr data-bt> element inserted right after the paragraph's
@@ -35,6 +35,103 @@ export function insertAfter(unit: Unit, wrapper: HTMLElement): void {
   anchor?.parentNode?.insertBefore(wrapper, anchor.nextSibling);
 }
 
+// ---- Translations a box would clip ------------------------------------------------------------
+
+/** Ancestors of a translation checked for a box that cuts it off (a line-clamped preview, say). */
+const MAX_CLIP_DEPTH = 4;
+/** A moved translation becomes the next block in normal flow; in flex or grid it would be a new item. */
+const FLOW_DISPLAYS: ReadonlySet<string> = new Set(["block", "flow-root", "list-item"]);
+/** Overflow values that cut content off; auto and scroll only hide what the reader can scroll to. */
+const CLIPPING: ReadonlySet<string> = new Set(["hidden", "clip"]);
+const MOVED_CLASS = "bt-moved";
+const CLAMP_CLASS = "bt-clamp";
+const MOVED_VARS = ["--bt-fs", "--bt-lh", "--bt-clamp"] as const;
+
+export interface Clip {
+  readonly clipper: Element;
+  /** The translation can sit right after the clipper: the clipper's parent lays out in normal flow. */
+  readonly movable: boolean;
+}
+
+/**
+ * The nearest box that hides part of this translation: it clips (overflow hidden or clip) and the
+ * translation reaches past its bottom. Undefined when nothing clips it or there is no layout.
+ */
+export function findClip(wrapper: HTMLElement): Clip | undefined {
+  const r = wrapper.getBoundingClientRect();
+  if (r.width === 0 && r.height === 0) return undefined;
+  let el = wrapper.parentElement;
+  for (let depth = 0; el && el !== document.body && depth < MAX_CLIP_DEPTH; depth++, el = el.parentElement) {
+    const style = getComputedStyle(el);
+    if (!CLIPPING.has(style.overflowY || style.overflow)) continue;
+    if (r.bottom <= el.getBoundingClientRect().bottom + 1) continue;
+    return { clipper: el, movable: FLOW_DISPLAYS.has(layoutParentDisplay(el)) };
+  }
+  return undefined;
+}
+
+/** Display of the box that lays out `el`'s siblings: display:contents ancestors have none. */
+function layoutParentDisplay(el: Element): string {
+  for (let p = el.parentElement; p; p = p.parentElement) {
+    const display = getComputedStyle(p).display;
+    if (display !== "contents") return display;
+  }
+  return "block";
+}
+
+/** A box clamped to a number of lines: a text preview, not a one-line control label. */
+export const isLineClamped = (el: Element) => lineClamp(el) > 0;
+
+export interface MovedLook {
+  readonly fontSize: string;
+  readonly lineHeight: string;
+  /** Lines the clipping box shows; 0 when it is not line-clamped. */
+  readonly clamp: number;
+}
+
+/** Read before any move is made, so measuring many translations needs one style pass. */
+export function movedLook(clipper: Element, unit: Unit): MovedLook {
+  const host = getComputedStyle(unit.host);
+  return { fontSize: host.fontSize, lineHeight: host.lineHeight, clamp: lineClamp(clipper) };
+}
+
+/**
+ * Moves a translation to just after the box that clips it, in the paragraph's font. A line clamp
+ * on that box applies to the translation too, so a card shows N lines of each.
+ */
+export function moveOutOf(wrapper: HTMLElement, clipper: Element, look: MovedLook): void {
+  wrapper.style.setProperty(MOVED_VARS[0], look.fontSize);
+  wrapper.style.setProperty(MOVED_VARS[1], look.lineHeight);
+  if (look.clamp > 0) {
+    wrapper.style.setProperty(MOVED_VARS[2], String(look.clamp));
+    wrapper.classList.add(CLAMP_CLASS);
+  }
+  wrapper.classList.add(MOVED_CLASS);
+  const slot = clipper.getAttribute("slot");
+  if (slot) wrapper.setAttribute("slot", slot);
+  else wrapper.removeAttribute("slot");
+  clipper.after(wrapper);
+}
+
+/** Lines a box is clamped to; engines that do not compute the property still expose an inline one. */
+function lineClamp(el: Element): number {
+  const computed = getComputedStyle(el);
+  const inline = el instanceof HTMLElement ? el.style : undefined;
+  const values = [computed, inline].flatMap((s) => (s ? [s.getPropertyValue("-webkit-line-clamp"), s.getPropertyValue("line-clamp")] : []));
+  return values.map((v) => Number.parseInt(v, 10)).find((n) => n > 0) ?? 0;
+}
+
+export const isMoved = (wrapper: Element) => wrapper.classList.contains(MOVED_CLASS);
+
+/** Puts a moved translation back next to its paragraph (translation-only replaces it there). */
+export function moveBack(unit: Unit, wrapper: HTMLElement): void {
+  wrapper.classList.remove(MOVED_CLASS, CLAMP_CLASS);
+  MOVED_VARS.forEach((v) => wrapper.style.removeProperty(v));
+  if (wrapper.getAttribute("style") === "") wrapper.removeAttribute("style");
+  wrapper.removeAttribute("slot");
+  insertAfter(unit, wrapper);
+}
+
 function setState(el: HTMLElement, state: "loading" | "done" | "error"): void {
   el.classList.remove("bt-loading", "bt-done", "bt-error");
   el.classList.add(`bt-${state}`);
@@ -48,7 +145,7 @@ const isControl = (n: Node) => n instanceof Element && (isDropped(n) || n.matche
 const MEDIA_SELECTOR = [...MEDIA_TAGS].join(",");
 /** Pictures are not carried into translations, so hiding the original would lose them (emoji excepted). */
 const hasMedia = (n: Node) =>
-  n instanceof Element && [n, ...n.querySelectorAll(MEDIA_SELECTOR)].some((e) => MEDIA_TAGS.has(e.localName) && !isEmojiImage(e));
+  n instanceof Element && [n, ...n.querySelectorAll(MEDIA_SELECTOR)].some((e) => isMedia(e) && !isEmojiImage(e));
 
 /**
  * Text nodes cannot be styled individually, so the original is only hidden when the paragraph
@@ -99,6 +196,23 @@ export function restoreHost(host: Element): void {
   if (host.style.cssText !== saved.cssText) return;
   if (saved.attr === null) host.removeAttribute("style");
   else host.setAttribute("style", saved.attr);
+}
+
+/**
+ * Runs `fn` while the translation-only paragraphs in and around `root` show their originals, so
+ * detection sees the page as the page styled it: hidden originals would otherwise read as text
+ * the page removed. Synchronous, so nothing is painted in between.
+ */
+export function withOriginalsShown<T>(root: Element, fn: () => T): T {
+  const around: Element[] = [];
+  for (let el = root.parentElement?.closest(`[${ONLY_ATTR}]`); el; el = el.parentElement?.closest(`[${ONLY_ATTR}]`)) around.push(el);
+  const hosts = [...around, ...(root.hasAttribute(ONLY_ATTR) ? [root] : []), ...root.querySelectorAll(`[${ONLY_ATTR}]`)];
+  hosts.forEach((h) => h.removeAttribute(ONLY_ATTR));
+  try {
+    return fn();
+  } finally {
+    hosts.forEach((h) => h.setAttribute(ONLY_ATTR, ""));
+  }
 }
 
 /** Undoes hideOriginal for the host of this translation. */

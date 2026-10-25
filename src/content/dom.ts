@@ -43,10 +43,16 @@ export interface CollectOptions {
 
 const display = (el: Element) => getComputedStyle(el).display;
 
+/** A component that places its light-DOM children through slots: their order is not the layout. */
+function composesWithSlots(el: Element): boolean {
+  for (const child of el.children) if (child.hasAttribute("slot")) return true;
+  return false;
+}
+
 function isInline(el: Element, d = display(el)): boolean {
   if (BOUNDARY_TAGS.has(el.localName)) return false;
   const inlineBox = d ? INLINE_DISPLAYS.has(d) : INLINE_TAGS.has(el.localName) || ATOMIC_TAGS.has(el.localName);
-  return inlineBox && el.querySelector(BLOCK_DESCENDANT) === null;
+  return inlineBox && !composesWithSlots(el) && el.querySelector(BLOCK_DESCENDANT) === null;
 }
 
 function isWhitespace(n: Node): boolean {
@@ -111,7 +117,10 @@ function visit(container: Element, out: Unit[], opts: CollectOptions): void {
       continue;
     }
     if (isInline(el, style.display)) {
+      // A web component renders each slotted child where its slot is, not next to its siblings.
+      if (el.hasAttribute("slot")) flush();
       run.push(el);
+      if (el.hasAttribute("slot")) flush();
       continue;
     }
     flush();

@@ -32,6 +32,25 @@ const PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>
   <div id="dyn"></div>
 </body></html>`;
 
+/** Layouts that hide or move translations: a clamped preview, a fallback <object>, a component. */
+const LAYOUT_PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Layout</title>
+<style>.clamped { width: 300px; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden } .clamped p { display: inline }</style>
+</head><body style="font:16px/1.5 sans-serif;max-width:640px;margin:24px auto">
+  <div id="feed"><div id="clamp" class="clamped"><p>A long preview of a forum post that the site cuts off after two lines, so anything appended after it would never be seen by the reader at all.</p></div></div>
+  <div id="feed2"><div id="clamp2" class="clamped"><p><img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" width="12" height="12" alt=""> A preview with a picture in it, long enough that the site cuts it off after two lines of text for every reader.</p></div></div>
+  <div style="display: flex; width: 300px"><a id="oneline" href="/c" style="display: block; height: 1.5em; overflow: hidden; white-space: nowrap; text-overflow: ellipsis">Merge branch with a long commit message that cannot fit in one line</a></div>
+  <div id="pane" style="height: 60px; overflow: auto; width: 300px"><p>A paragraph in a scrolling pane that runs past the bottom edge of the pane, which the reader can scroll to and read in full.</p></div>
+  <p id="obj">See <object role="none"><a href="/guide">the setup guide</a></object> for every detail.</p>
+  <x-card id="card"><span slot="title">Slotted card title words</span>Unslotted counter words here</x-card>
+  <div id="live"><p id="tick">Posted by <a href="/u">someone</a> about the next release</p></div>
+  <script>
+    customElements.define("x-card", class extends HTMLElement {
+      constructor() { super(); this.attachShadow({ mode: "open" }).innerHTML = "<b><slot name=title></slot></b>"; }
+    });
+    setInterval(() => document.getElementById("live").classList.toggle("on"), 150);
+  </script>
+</body></html>`;
+
 const MARKER = /^\[\[(\d+)\]\]$/;
 
 /** Mock model: prefixes every segment with [ZH], keeping placeholders intact. */
@@ -46,8 +65,9 @@ function fakeTranslate(user) {
 function startServer() {
   const requests = [];
   const server = createServer((req, res) => {
-    if (req.method === "GET" && new URL(req.url, "http://x").pathname === "/page.html") {
-      res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(PAGE);
+    const path = req.method === "GET" ? new URL(req.url, "http://x").pathname : "";
+    if (path === "/page.html" || path === "/layout.html") {
+      res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(path === "/page.html" ? PAGE : LAYOUT_PAGE);
       return;
     }
     if (req.method === "POST" && req.url === "/v1/chat/completions") {
@@ -239,6 +259,85 @@ try {
     await toggle();
     await page.waitForSelector("#p1 bt-tr.bt-done", { timeout: 10_000 });
     assert.equal(requests.length, before);
+  });
+
+  await step("translations stay visible and steady in clamped, wrapped and live layouts", async () => {
+    const layoutUrl = `http://127.0.0.1:${port}/layout.html`;
+    const layout = await context.newPage();
+    await layout.goto(layoutUrl);
+    const send = (message) =>
+      options.evaluate(
+        async ([url, message]) => {
+          const [tab] = await chrome.tabs.query({ url });
+          return chrome.runtime.sendMessage({ ...message, tabId: tab.id });
+        },
+        [layoutUrl, message],
+      );
+    await layout.bringToFront();
+    await send({ type: "toggle-tab" });
+    await layout.waitForFunction(() => document.querySelectorAll("bt-tr.bt-done").length >= 7, null, { timeout: 10_000 });
+    await layout.waitForTimeout(300); // translations are measured for clipping on the next frame
+
+    // A translation the clamped preview would cut off is moved after it, clamped to two lines.
+    const clamp = await layout.evaluate(() => {
+      const box = document.getElementById("clamp");
+      const tr = box.nextElementSibling;
+      const r = tr?.getBoundingClientRect();
+      return { moved: tr?.matches("bt-tr.bt-moved.bt-done") ?? false, shown: (r?.height ?? 0) > 0, below: (r?.top ?? 0) >= box.getBoundingClientRect().bottom - 1, lines: tr ? getComputedStyle(tr).webkitLineClamp : "" };
+    });
+    assert.deepEqual(clamp, { moved: true, shown: true, below: true, lines: "2" });
+    // A one-line box in a flex row has no room for both and nowhere to move the translation to:
+    // the translation takes the original's place.
+    assert.equal(await layout.evaluate(() => { const a = document.getElementById("oneline"); return a.hasAttribute("data-bt-only") && (a.querySelector("bt-tr")?.getBoundingClientRect().height ?? 0) > 0; }), true);
+    // A scrolling pane does not clip: its translation stays with its paragraph.
+    assert.deepEqual(await layout.evaluate(() => ({ inside: document.querySelector("#pane bt-tr")?.matches(".bt-done:not(.bt-moved)") ?? false, after: document.querySelector("#pane + bt-tr") !== null })), { inside: true, after: false });
+    assert.equal(await layout.evaluate(() => document.querySelector("#clamp2 + bt-tr")?.matches(".bt-moved.bt-done") ?? false), true);
+    // The page rewrites a preview whose translation was moved out: no stale or second translation.
+    await layout.evaluate(() => {
+      document.getElementById("clamp").innerHTML = "<p>Rewritten preview text that is long enough to fill both lines of the clamped box and push its translation out of sight again.</p>";
+    });
+    await layout.waitForFunction(() => /Rewritten/.test(document.querySelector("#clamp + bt-tr.bt-done")?.textContent ?? ""), null, { timeout: 10_000 });
+    assert.equal(await layout.evaluate(() => [...document.querySelectorAll("#feed > bt-tr, #clamp bt-tr")].length), 1);
+    // A link wrapped in an <object> without data stays part of the sentence.
+    assert.match(await layout.$eval("#obj bt-tr", (el) => el.textContent), /the setup guide/);
+    // Slotted text is translated in its slot; text the component does not render is not.
+    const card = await layout.evaluate(() => [...document.querySelectorAll("#card > bt-tr")].map((t) => ({ slot: t.getAttribute("slot"), text: t.textContent })));
+    assert.deepEqual(card.map((c) => c.slot), ["title"], await layout.$eval("#card", (el) => el.outerHTML));
+    assert.ok(card.every((c) => !/Unslotted/.test(c.text)));
+
+    // Translation only: the translation goes back into the preview box, and the paragraph inside
+    // a container the page keeps restyling does not flip back to the original.
+    const before = requests.length;
+    await send({ type: "set-mode", mode: "translation-only" });
+    assert.equal(await layout.$eval("#clamp", (box) => box.querySelector(":scope > bt-tr") !== null && box.hasAttribute("data-bt-only")), true);
+    // A preview holding a picture cannot hide its original: its translation stays out of the clip.
+    assert.equal(await layout.evaluate(() => { const t = document.querySelector("#clamp2 + bt-tr.bt-moved"); return (t?.getBoundingClientRect().height ?? 0) > 0; }), true);
+    // Sampled every frame: what the reader sees, not the attribute churn of a synchronous rescan.
+    const flips = await layout.evaluate(
+      () =>
+        new Promise((resolve) => {
+          const tick = document.getElementById("tick");
+          let frames = 0;
+          let showedOriginal = 0;
+          let replaced = 0;
+          new MutationObserver((records) => (replaced += records.filter((r) => [...r.removedNodes].some((n) => n.localName === "bt-tr")).length)).observe(tick, { childList: true });
+          const sample = () => {
+            frames++;
+            if (getComputedStyle(tick.querySelector(":scope > a")).display !== "none" || !tick.querySelector(":scope > bt-tr.bt-done")) showedOriginal++;
+            if (frames < 60) requestAnimationFrame(sample);
+            else resolve({ showedOriginal, replaced });
+          };
+          requestAnimationFrame(sample);
+        }),
+    );
+    assert.deepEqual(flips, { showedOriginal: 0, replaced: 0 });
+    assert.equal(requests.length, before);
+
+    await send({ type: "set-mode", mode: "bilingual" });
+    await send({ type: "toggle-tab" });
+    assert.equal(await layout.$("bt-tr, [data-bt-only]"), null);
+    await layout.close();
+    await page.bringToFront();
   });
 
   await step("options page lists the provider and its test succeeds", async () => {

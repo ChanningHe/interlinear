@@ -13,6 +13,20 @@ bt-tr[data-bt].bt-block {
   margin: 0.3em 0 0;
 }
 
+/* Moved out of a box that would clip it (render.ts moveOutOf): the paragraph's font, its clamp. */
+bt-tr[data-bt].bt-moved {
+  display: block;
+  font-size: var(--bt-fs);
+  line-height: var(--bt-lh);
+}
+
+bt-tr[data-bt].bt-moved.bt-clamp {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: var(--bt-clamp);
+  overflow: hidden;
+}
+
 bt-tr[data-bt].bt-inline {
   display: inline;
   margin-inline-start: 0.4em;

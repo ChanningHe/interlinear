@@ -379,3 +379,37 @@ describe("streaming and priority", () => {
   });
 });
 
+
+describe("translation-only stays put while the page changes", () => {
+  // The same rule content.css uses to hide the original of a translation-only paragraph.
+  const hideRule = "[data-bt-only] > :not(bt-tr[data-bt]) { display: none !important; }";
+
+  test("a page update around a hidden original does not bring the original back", async () => {
+    const style = document.createElement("style");
+    style.textContent = hideRule;
+    document.head.append(style);
+    try {
+      const t = setup('<div id="post"><p id="a">Read <a href="#">the docs</a> before you start</p></div>', { config: { ...config, displayMode: "translation-only" } });
+      t.start();
+      const host = document.getElementById("a")!;
+      await vi.waitFor(() => expect(host.hasAttribute("data-bt-only")).toBe(true));
+      document.getElementById("post")!.className = "highlighted"; // a page update that does not change the text
+      await new Promise((r) => setTimeout(r, 20));
+      expect(host.hasAttribute("data-bt-only")).toBe(true);
+      expect(host.querySelectorAll("bt-tr")).toHaveLength(1);
+      expect(upper).toHaveBeenCalledTimes(1);
+    } finally {
+      style.remove();
+    }
+  });
+
+  test("a paragraph the page re-renders gets its earlier translation without a new request", async () => {
+    const t = setup('<div id="post"><p>First reply in the thread</p></div>');
+    t.start();
+    await vi.waitFor(() => expect(translations()).toEqual(["FIRST REPLY IN THE THREAD"]));
+    // Virtualised lists replace a post with fresh nodes when it scrolls back into view.
+    document.getElementById("post")!.innerHTML = "<p>First reply in the thread</p>";
+    await vi.waitFor(() => expect(translations()).toEqual(["FIRST REPLY IN THE THREAD"]));
+    expect(upper).toHaveBeenCalledTimes(1);
+  });
+});

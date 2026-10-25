@@ -4,9 +4,16 @@ import type { PageConfig, TranslatePriority, TranslateResult } from "../shared/m
 import { blockAncestor, collectUnits, contentRoots, isInsideSkipped, sourceOf, type CollectOptions, type Unit } from "./dom";
 import {
   ONLY_ATTR,
+  canHideOriginal,
   createWrapper,
+  findClip,
   hideOriginal,
   insertAfter,
+  isLineClamped,
+  isMoved,
+  moveBack,
+  moveOutOf,
+  movedLook,
   removeAllTranslations,
   removeWrapper,
   restoreHost,
@@ -14,6 +21,7 @@ import {
   showLoading,
   showOriginal,
   showTranslation,
+  withOriginalsShown,
 } from "./render";
 import { OWN_ATTR } from "./rules";
 import { plainText } from "./serialize";
@@ -62,8 +70,15 @@ const OBSERVED_ATTRIBUTES = ["class", "hidden", "open"];
 
 /** Coalesces paragraphs that become visible together into fewer requests. */
 const QUEUE_DELAY_MS = 120;
-/** Lets SPA re-renders settle before re-scanning. */
-const MUTATION_DELAY_MS = 300;
+/**
+ * Lets SPA re-renders settle before re-scanning. Short for added or changed nodes, so re-rendered
+ * paragraphs get their remembered translation quickly (new text still waits QUEUE_DELAY_MS before
+ * any request); longer for attribute-only changes, which carousels and spinners make constantly.
+ */
+const MUTATION_DELAY_MS = 100;
+const ATTRIBUTE_DELAY_MS = 300;
+/** Translations kept for paragraphs the page renders again (virtualised lists, SPA re-renders). */
+const MAX_REMEMBERED = 5000;
 /**
  * A page that keeps generating text (or a hostile one) must not drain the API budget.
  * After this many characters per activation the user has to click to continue.
@@ -111,9 +126,20 @@ function boxOf(el: Element): Element {
 function isRendered(u: Unit): boolean {
   return u.nodes.some((n) => {
     const el = n instanceof Element ? n : n.parentElement;
-    if (!el || typeof el.checkVisibility !== "function") return true;
-    return boxOf(el).checkVisibility({ checkVisibilityCSS: true });
+    if (!el || typeof el.checkVisibility !== "function") return true; // no layout (tests)
+    if (!boxOf(el).checkVisibility({ checkVisibilityCSS: true })) return false;
+    // Light-DOM text a web component assigns to no slot is never laid out, though its host is.
+    return n instanceof Element || !isUnplaced(n, el);
   });
+}
+
+/** Text with no line boxes inside a parent that has a box of its own. */
+function isUnplaced(text: Node, parent: Element): boolean {
+  const box = parent.getBoundingClientRect();
+  if (box.width === 0 && box.height === 0) return false; // the parent itself is not laid out
+  const range = document.createRange();
+  range.selectNodeContents(text);
+  return range.getClientRects().length === 0;
 }
 
 /** Letters and digits only, so "Proton Mail" and "Proton Mail." compare equal. Case still counts. */
@@ -143,6 +169,7 @@ export function intersectionVisibility(onVisible: (els: readonly Element[]) => v
 export function createPageTranslator(deps: PageTranslatorDeps) {
   const queueDelay = deps.queueDelayMs ?? QUEUE_DELAY_MS;
   const mutationDelay = deps.mutationDelayMs ?? MUTATION_DELAY_MS;
+  const attributeDelay = deps.mutationDelayMs ?? ATTRIBUTE_DELAY_MS;
   const allowanceStep = deps.charAllowance ?? CHAR_ALLOWANCE;
   const requireTrustedClick = deps.requireTrustedClick ?? true;
   const isOnScreen = deps.isOnScreen ?? inViewport;
@@ -171,6 +198,14 @@ export function createPageTranslator(deps: PageTranslatorDeps) {
   let queue: readonly Unit[] = [];
   /** Aborted by stop(): requests still waiting or streaming are cancelled. */
   let session = new AbortController();
+  /** Serialized source → translation, for this page and these settings. Oldest entries go first. */
+  const remembered = new Map<string, string>();
+
+  function remember(text: string, translation: string): void {
+    remembered.delete(text);
+    remembered.set(text, translation);
+    if (remembered.size > MAX_REMEMBERED) remembered.delete(remembered.keys().next().value!);
+  }
   let pendingRoots: ReadonlySet<Element> = new Set();
   let queueTimer: ReturnType<typeof setTimeout> | undefined;
   let mutationTimer: ReturnType<typeof setTimeout> | undefined;
@@ -206,24 +241,43 @@ export function createPageTranslator(deps: PageTranslatorDeps) {
    */
   function scan(root: Element, how: "lazy" | "region" = "lazy"): void {
     // A region is something the user pointed at: only noise is filtered there, not page chrome.
-    const units = collectUnits(root, how === "region" ? {} : scopedOpts);
+    const units = withOriginalsShown(root, () => collectUnits(root, how === "region" ? {} : scopedOpts));
     pruneStale(root, new Map(units.map((u) => [anchorOf(u), u])));
 
     const byHost = new Map<Element, Unit[]>();
+    const known: Unit[] = [];
     for (const u of units) {
       const prev = tracked.get(anchorOf(u));
       const unit = prev && sameShape(prev.unit.text, u.text) ? prev.unit : u;
-      if (unit === u) tracked.set(anchorOf(u), { unit, requested: false });
+      if (unit === u) {
+        // The page rewrote it. pruneStale only sees translations inside `root`; one moved out of
+        // a clipping box sits next to it.
+        if (prev?.wrapper?.isConnected) removeWrapper(prev.wrapper);
+        tracked.set(anchorOf(u), { unit, requested: false });
+      }
       byHost.set(u.host, [...(byHost.get(u.host) ?? []), unit]);
     }
     for (const [host, list] of byHost) {
       hostUnits.set(host, list);
       if (how === "region") {
         if (host === root) list.forEach((u) => void request(u));
-      } else if (list.some((u) => !tracked.get(anchorOf(u))?.requested)) {
-        visibility?.observe(host);
+        continue;
       }
+      // Already translated on this page (the page rendered it again): shown now, not on scroll.
+      known.push(...list.filter((u) => remembered.has(u.text) && !tracked.get(anchorOf(u))?.requested));
+      // Observed even when all are remembered: one that cannot be shown yet (hidden) waits for it.
+      if (list.some((u) => !tracked.get(anchorOf(u))?.requested)) visibility?.observe(host);
     }
+    // Every check reads layout; doing them all before any insertion keeps it to one layout pass.
+    known.filter((u) => stillValid(u) && isRendered(u)).forEach(showRemembered);
+  }
+
+  function showRemembered(u: Unit): void {
+    const text = remembered.get(u.text);
+    if (text === undefined) return;
+    update(u, { requested: true });
+    remember(u.text, text); // recently seen again: keep it longest
+    show(u, { ok: true, text }, attach(u));
   }
 
   function onVisible(hosts: readonly Element[]): void {
@@ -241,16 +295,22 @@ export function createPageTranslator(deps: PageTranslatorDeps) {
       return;
     }
     if (!isRendered(u)) return; // stays unrequested: a later rescan may find it shown
+    if (remembered.has(u.text)) return showRemembered(u); // synchronously, before the page paints English
     update(u, { requested: true });
     if (await deps.isTargetLanguage(plainText(u.text))) return;
     if (!isCurrent(u)) return;
 
+    showLoading(attach(u));
+    enqueue(u);
+  }
+
+  /** Inserts the translation box for a paragraph. */
+  function attach(u: Unit): HTMLElement {
     const wrapper = createWrapper(u, deps.config.targetLang, deps.config.style);
-    showLoading(wrapper);
     insertAfter(u, wrapper);
     wrapperAnchor.set(wrapper, anchorOf(u));
     update(u, { wrapper });
-    enqueue(u);
+    return wrapper;
   }
 
   const labels = deps.config.labels;
@@ -303,9 +363,9 @@ export function createPageTranslator(deps: PageTranslatorDeps) {
     chunkBatches(later, size, { maxChars, maxItems }).forEach((b) => void sendBatch(b, "prefetch"));
   }
 
-  function show(u: Unit, r: TranslateResult): void {
-    const wrapper = tracked.get(anchorOf(u))?.wrapper;
+  function show(u: Unit, r: TranslateResult, wrapper = tracked.get(anchorOf(u))?.wrapper): void {
     if (!isCurrent(u) || !wrapper?.isConnected) return;
+    if (r.ok) remember(u.text, r.text);
     if (r.ok && isUnchanged(u, r.text)) {
       removeWrapper(wrapper);
       update(u, { wrapper: undefined });
@@ -313,13 +373,69 @@ export function createPageTranslator(deps: PageTranslatorDeps) {
     }
     if (r.ok) {
       showTranslation(wrapper, u, r.text);
-      if (mode === "translation-only") hideOriginal(u, wrapper);
+      // A paragraph that must stay bilingual (it shares its box, holds a picture) is fitted too.
+      if (mode !== "translation-only" || !hideOriginal(u, wrapper)) fitLater(u);
       return;
     }
     showError(wrapper, retryView(r.error), () => {
       showLoading(wrapper);
       enqueue(u);
     });
+  }
+
+  /** Translations to check, once laid out, for a box that cuts them off (line-clamped previews). */
+  let unfitted = new Set<Unit>();
+  let fitFrame: number | undefined;
+  /**
+   * Translations moved out of their paragraph's subtree. A rescan of the paragraph does not see
+   * them, so they are checked against their paragraph on every mutation pass.
+   */
+  const moved = new Set<HTMLElement>();
+
+  function fitLater(u: Unit): void {
+    if (typeof requestAnimationFrame !== "function") return;
+    unfitted.add(u);
+    fitFrame ??= requestAnimationFrame(fit);
+  }
+
+  /** Measures every pending translation first, then moves the clipped ones: one layout pass. */
+  function fit(): void {
+    const pending = [...unfitted];
+    unfitted = new Set();
+    fitFrame = undefined;
+    const moves = pending.flatMap((u) => {
+      const w = tracked.get(anchorOf(u))?.wrapper;
+      const candidate = w?.isConnected && w.classList.contains("bt-done") && !isMoved(w) && !w.parentElement?.hasAttribute(ONLY_ATTR);
+      if (!isCurrent(u) || !candidate) return [];
+      const clip = findClip(w);
+      // Short inline translations (labels, menu items) stay put unless the box is a clamped text
+      // preview: elsewhere moving them would reflow controls.
+      if (!clip || (w.classList.contains("bt-inline") && !isLineClamped(clip.clipper))) return [];
+      return [{ u, w, clip, look: clip.movable ? movedLook(clip.clipper, u) : undefined }];
+    });
+    for (const { u, w, clip, look } of moves) {
+      if (look) {
+        moveOutOf(w, clip.clipper, look);
+        moved.add(w);
+      } else {
+        // No room for both and nowhere to put the translation (a one-line cell in a flex row):
+        // show the translation in the original's place rather than not at all.
+        hideOriginal(u, w);
+      }
+    }
+  }
+
+  /** Drops moved translations whose paragraph the page removed or rewrote. */
+  function dropStaleMoved(): void {
+    for (const w of moved) {
+      const anchor = wrapperAnchor.get(w);
+      const t = anchor && tracked.get(anchor);
+      if (w.isConnected && t?.wrapper === w && stillValid(t.unit)) continue;
+      moved.delete(w);
+      if (!w.isConnected) continue;
+      removeWrapper(w);
+      if (anchor && t?.wrapper === w) tracked.delete(anchor);
+    }
   }
 
   async function sendBatch(batch: readonly Unit[], priority: TranslatePriority): Promise<void> {
@@ -351,10 +467,14 @@ export function createPageTranslator(deps: PageTranslatorDeps) {
       // The page deleted a translation that stood in for its original: show the original again.
       if ([...r.removedNodes].some(isOwnNode)) restoreOrphanedHost(r.target);
       if (r.type === "childList" && [...r.addedNodes, ...r.removedNodes].every(isOwnNode)) continue;
-      roots.add(blockAncestor(r.target));
+      // Inside a translation-only paragraph every original child is display:none, so it is the
+      // paragraph itself that has to be looked at again.
+      const target = r.target instanceof Element ? r.target : r.target.parentElement;
+      roots.add(target?.closest(`[${ONLY_ATTR}]`) ?? blockAncestor(r.target));
     }
     pendingRoots = roots;
-    if (roots.size > 0) mutationTimer ??= setTimeout(processMutations, mutationDelay);
+    const structural = records.some((r) => r.type !== "attributes");
+    if (roots.size > 0) mutationTimer ??= setTimeout(processMutations, structural ? mutationDelay : attributeDelay);
   }
 
   /** Strictly inside a content root: changes to the roots themselves or their ancestors do not count. */
@@ -363,6 +483,7 @@ export function createPageTranslator(deps: PageTranslatorDeps) {
   }
 
   function processMutations(): void {
+    dropStaleMoved();
     const changed = [...pendingRoots].filter((r) => r.isConnected);
     pendingRoots = new Set();
     mutationTimer = undefined;
@@ -406,8 +527,17 @@ export function createPageTranslator(deps: PageTranslatorDeps) {
     mode = next;
     deps.root.querySelectorAll<HTMLElement>(`bt-tr[${OWN_ATTR}].bt-done`).forEach((w) => {
       const unit = tracked.get(wrapperAnchor.get(w) ?? w)?.unit;
-      if (next === "translation-only" && unit) hideOriginal(unit, w);
-      else showOriginal(w);
+      if (next === "translation-only" && unit) {
+        // The translation replaces the original in its own box, if the original can be hidden.
+        if (isMoved(w) && canHideOriginal(unit) && stillValid(unit)) {
+          moveBack(unit, w);
+          moved.delete(w);
+        }
+        if (!hideOriginal(unit, w)) fitLater(unit);
+        return;
+      }
+      showOriginal(w);
+      if (unit) fitLater(unit);
     });
   }
 
@@ -445,6 +575,10 @@ export function createPageTranslator(deps: PageTranslatorDeps) {
       clearTimeout(queueTimer);
       clearTimeout(mutationTimer);
       queueTimer = mutationTimer = undefined;
+      if (fitFrame !== undefined) cancelAnimationFrame(fitFrame);
+      fitFrame = undefined;
+      unfitted = new Set();
+      moved.clear();
       queue = [];
       paused = [];
       pendingRoots = new Set();

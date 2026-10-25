@@ -1,4 +1,4 @@
-import { MEDIA_TAGS, isAtomic, isDropped, isInvisible, isNoise } from "./rules";
+import { isAtomic, isDropped, isFallbackObject, isInvisible, isMedia, isNoise } from "./rules";
 
 // Inline markup travels through the LLM as tiny placeholder tags:
 //   <g1>…</g1>  a formatting element (link, bold…) whose contents get translated
@@ -63,8 +63,10 @@ export function serialize(nodes: readonly Node[]): Serialized {
     if (node.nodeType === Node.TEXT_NODE) return escapeText(node.nodeValue ?? "");
     if (node.nodeType !== Node.ELEMENT_NODE) return "";
     const el = node as Element;
-    if (MEDIA_TAGS.has(el.localName)) return mediaText(el);
+    if (isMedia(el)) return mediaText(el);
     if (isUnseen(el)) return "";
+    // Transparent: its children are what the reader sees; the wrapper itself is not cloned.
+    if (isFallbackObject(el)) return [...el.childNodes].map(walk).join("");
     const id = tokens.size + 1;
     if (isAtomic(el)) {
       if (!isSafeToDeepClone(el)) return "";

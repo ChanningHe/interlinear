@@ -39,13 +39,27 @@ const EDITABLE_VALUES = new Set(["", "true", "plaintext-only"]);
 /** Marker attribute on every node this extension inserts. */
 export const OWN_ATTR = "data-bt";
 
+/**
+ * An <object> without data loads nothing and renders its children (HTML fallback content).
+ * Sites use it as a plain wrapper, e.g. to nest links inside a clickable card.
+ */
+export function isFallbackObject(el: Element): boolean {
+  return el.localName === "object" && !el.hasAttribute("data");
+}
+
+/** Pictures, players and embedded content; see MEDIA_TAGS. */
+export function isMedia(el: Element): boolean {
+  return MEDIA_TAGS.has(el.localName) && !isFallbackObject(el);
+}
+
 export function isNoTranslate(el: Element): boolean {
   return el.getAttribute("translate") === "no" || el.classList.contains("notranslate") || el.hasAttribute(OWN_ATTR);
 }
 
 export function isSkipped(el: Element): boolean {
   const editable = el.getAttribute("contenteditable");
-  return SKIP_TAGS.has(el.localName) || isNoTranslate(el) || (editable !== null && EDITABLE_VALUES.has(editable));
+  const skippedTag = SKIP_TAGS.has(el.localName) && !isFallbackObject(el);
+  return skippedTag || isNoTranslate(el) || (editable !== null && EDITABLE_VALUES.has(editable));
 }
 
 /**
@@ -53,6 +67,7 @@ export function isSkipped(el: Element): boolean {
  * on their own as paragraph boundaries, but must never be cloned into another translation.
  */
 export function isDropped(el: Element): boolean {
+  if (isFallbackObject(el)) return false;
   return el.localName === "button" || (SKIP_TAGS.has(el.localName) && !ATOMIC_TAGS.has(el.localName));
 }
 
