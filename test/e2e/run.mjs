@@ -357,6 +357,11 @@ try {
     // macOS reports Alt shortcuts with the Option symbol.
     await options.waitForFunction(() => ["Alt+Q", "⌥Q"].includes(document.querySelector("kbd")?.textContent));
     assert.ok(await options.getByRole("button", { name: "Change shortcut…" }).isVisible());
+    // The page helpers say they need access to every site, with a button to grant it; the hover
+    // key and its shortcut are one setting.
+    assert.ok(await options.locator("#helpers .needs-access").getByRole("button", { name: "Enable on every website" }).isVisible());
+    await options.waitForFunction(() => /Alt\+P|⌥P/.test(document.querySelector("#helpers")?.textContent ?? ""));
+    assert.ok(await options.locator("#helpers").getByText("Translate the paragraph under the mouse").isVisible());
   });
 
   await step("options page picks the active service from the list and its menu dismisses", async () => {

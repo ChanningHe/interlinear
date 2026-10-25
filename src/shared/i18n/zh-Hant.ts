@@ -100,7 +100,6 @@ export const zhHant: Messages = {
   styleBlur: "模糊（學習）",
 
   hoverKey: "懸停按鍵",
-  hoverKeyDesc: "滑鼠指向段落時輕按一下，或按住並移動，只翻譯這些段落。",
   modCtrl: "Ctrl / Control",
   modAlt: "Alt / Option",
   modShift: "Shift",
@@ -111,7 +110,13 @@ export const zhHant: Messages = {
   inputTranslationDesc: "在輸入框中連按三次空白鍵，翻譯你輸入的內容。",
   inputTarget: "輸入內容翻譯成",
   everywhere: "在所有網站啟用",
-  everywhereDesc: "否則這些功能只在你翻譯過的頁面和「總是翻譯」的網站上生效。需要所有網站的存取權限（儲存時請求）；仍然只在你操作時才送出文字。",
+  hoverParagraphDesc: "滑鼠指向段落時輕按此鍵，或按住並劃過多個段落。也可以按快速鍵 {shortcut}。",
+  helpersNeedAccess: "以下功能需要在所有網站啟用後才能使用。",
+  helpersAccessDesc: "需要存取所有網站的權限；仍然只在你使用這些功能時才傳送文字。",
+  enabledEverywhere: "已在所有網站啟用",
+  helpersReloadNote: "已開啟的頁面重新整理後生效。",
+  disableEverywhere: "關閉",
+  accessDenied: "未取得存取權限。",
 
   noSites: "還沒有網站。在下方新增，或在網站上開啟工具列彈出視窗，啟用「總是翻譯此網站」。",
   addSite: "新增網站",

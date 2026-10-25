@@ -100,7 +100,6 @@ export const zhHans: Messages = {
   styleBlur: "模糊（学习）",
 
   hoverKey: "悬停按键",
-  hoverKeyDesc: "鼠标指向段落时轻按一下，或按住并移动，只翻译这些段落。",
   modCtrl: "Ctrl / Control",
   modAlt: "Alt / Option",
   modShift: "Shift",
@@ -111,7 +110,13 @@ export const zhHans: Messages = {
   inputTranslationDesc: "在输入框中连按三次空格，翻译你输入的内容。",
   inputTarget: "输入内容翻译成",
   everywhere: "在所有网站启用",
-  everywhereDesc: "否则这些功能只在你翻译过的页面和“总是翻译”的网站上生效。需要所有网站的访问权限（保存时请求）；仍然只在你操作时才发送文本。",
+  hoverParagraphDesc: "鼠标指向段落时轻按此键，或按住并划过多个段落。也可以按快捷键 {shortcut}。",
+  helpersNeedAccess: "以下功能需要在所有网站启用后才能使用。",
+  helpersAccessDesc: "需要访问所有网站的权限；仍然只在你使用这些功能时才发送文本。",
+  enabledEverywhere: "已在所有网站启用",
+  helpersReloadNote: "已打开的页面刷新后生效。",
+  disableEverywhere: "关闭",
+  accessDenied: "未获得访问权限。",
 
   noSites: "还没有网站。在下方添加，或在网站上打开工具栏弹窗，开启“总是翻译此网站”。",
   addSite: "添加网站",

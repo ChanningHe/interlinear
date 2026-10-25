@@ -109,7 +109,6 @@ export const en = {
 
   // hover & input
   hoverKey: "Hover key",
-  hoverKeyDesc: "Tap it over a paragraph, or hold it and move, to translate just that paragraph.",
   modCtrl: "Ctrl / Control",
   modAlt: "Alt / Option",
   modShift: "Shift",
@@ -120,8 +119,13 @@ export const en = {
   inputTranslationDesc: "Press Space three times in a text field to translate what you typed.",
   inputTarget: "Translate input into",
   everywhere: "Enable on every website",
-  everywhereDesc:
-    "Otherwise these work on pages you translated and on sites set to always translate. Needs access to all sites (asked on Save); text is still only sent when you act.",
+  hoverParagraphDesc: "Tap the key with the pointer over a paragraph, or hold it and move across paragraphs. The {shortcut} shortcut does the same.",
+  helpersNeedAccess: "These work only after you enable them on every website.",
+  helpersAccessDesc: "Needs access to all websites. Text is still sent only when you use one of them.",
+  enabledEverywhere: "Enabled on every website",
+  helpersReloadNote: "Pages that are already open start using them after a reload.",
+  disableEverywhere: "Turn off",
+  accessDenied: "Access was not granted.",
 
   // sites
   noSites: 'No sites yet. Add one below, or open the toolbar popup on a site and turn on "Always translate this site".',

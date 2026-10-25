@@ -31,7 +31,7 @@ function drawerHost(ctx: OptionsContext): DrawerHost {
   return {
     t: ctx.t,
     save(p: Provider, activate: boolean) {
-      ctx.persistServices((s) => {
+      ctx.persist((s) => {
         const exists = s.providers.some((x) => x.id === p.id);
         const providers = exists ? s.providers.map((x) => (x.id === p.id ? p : x)) : [...s.providers, p];
         return { providers, activeProviderId: activate || !s.activeProviderId ? p.id : s.activeProviderId };
@@ -51,12 +51,12 @@ function serviceRow(ctx: OptionsContext, p: Provider): HTMLElement {
   const { t } = ctx;
   const spec = adapterOf(p.adapter);
   const remove = () =>
-    ctx.persistServices((s) => {
+    ctx.persist((s) => {
       const providers = s.providers.filter((x) => x.id !== p.id);
       return { providers, activeProviderId: s.activeProviderId === p.id ? (providers[0]?.id ?? "") : s.activeProviderId };
     });
   const radio = h("input", { type: "radio", name: "active-service", id: `svc-${p.id}`, value: p.id, checked: p.id === ctx.draft.activeProviderId });
-  radio.addEventListener("change", () => ctx.persistServices((s) => ({ providers: s.providers, activeProviderId: p.id })));
+  radio.addEventListener("change", () => ctx.persist((s) => ({ providers: s.providers, activeProviderId: p.id })));
   return h(
     "div",
     { class: "svc provider" },

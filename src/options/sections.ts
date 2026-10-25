@@ -1,4 +1,5 @@
 import {
+  ALL_SITES,
   GLOSSARY_LIMITS,
   LIMITS,
   exportSettings,
@@ -45,11 +46,10 @@ export interface OptionsContext {
   render(): void;
   setStatus(text: string, kind?: StatusKind): void;
   /**
-   * Saves a change to services at once (list and drawer); call synchronously inside a click.
-   * `update` gets the saved settings, so unsaved edits elsewhere on the page are neither saved
-   * nor lost.
+   * Saves a change at once (services, site access); call synchronously inside a click. `update`
+   * gets the saved settings, so unsaved edits elsewhere on the page are neither saved nor lost.
    */
-  persistServices(update: (saved: Settings) => Pick<Settings, "providers" | "activeProviderId">): void;
+  persist(update: (saved: Settings) => Partial<Settings>, opts?: { readonly onlyIfGranted?: boolean }): void;
   /** Revokes host access and sign-ins nothing saved still uses (a drawer was closed). */
   tidy(): void;
 }
@@ -210,13 +210,41 @@ function appearanceSection(ctx: OptionsContext): Node[] {
 
 // ---- Hover, selection, input box --------------------------------------------------------------
 
+/**
+ * The helpers below run only where the content script is loaded, which needs access to every
+ * site. Asked for with a button, never as a side effect of a switch. Shows what the browser
+ * actually granted, so access revoked on the browser's own page reads as off.
+ */
+function helperAccess(ctx: OptionsContext): HTMLElement {
+  const { t } = ctx;
+  const box = h("div", { class: "group" });
+  const draw = (enabled: boolean) => {
+    const button = enabled
+      ? h("button", { onClick: () => ctx.persist(() => ({ everywhere: false })) }, t("disableEverywhere"))
+      : h("button", { class: "primary", onClick: () => ctx.persist(() => ({ everywhere: true }), { onlyIfGranted: true }) }, t("everywhere"));
+    const row = settingRow(t(enabled ? "enabledEverywhere" : "helpersNeedAccess"), t(enabled ? "helpersReloadNote" : "helpersAccessDesc"), button);
+    row.classList.toggle("needs-access", !enabled);
+    box.replaceChildren(row);
+  };
+  draw(ctx.draft.everywhere);
+  void chrome.permissions.contains({ origins: [...ALL_SITES] }).then((granted) => draw(ctx.draft.everywhere && granted));
+  return box;
+}
+
 function helpersSection(ctx: OptionsContext): Node[] {
   const { draft, t } = ctx;
+  // One feature with two triggers: the key below, or the browser shortcut that works anywhere.
+  const hoverDesc = h("span", {}, t("hoverParagraphDesc", { shortcut: "…" }));
+  void chrome.commands.getAll().then((commands) => {
+    const shortcut = commands.find((c) => c.name === HOVER_COMMAND)?.shortcut || t("notSet");
+    hoverDesc.textContent = t("hoverParagraphDesc", { shortcut });
+  });
   return [
+    helperAccess(ctx),
     group(
       settingRow(
-        t("hoverKey"),
-        t("hoverKeyDesc"),
+        t("cmdHover"),
+        hoverDesc,
         selectInput(draft.hoverModifier, translatedOptions(t, MODIFIERS), (v) => ctx.patch({ hoverModifier: v }), { "aria-label": t("hoverKey") }),
       ),
       settingRow(t("selectionButton"), t("selectionButtonDesc"), switchInput(draft.selectionButton, (v) => ctx.patch({ selectionButton: v }), t("selectionButton"))),
@@ -227,7 +255,6 @@ function helpersSection(ctx: OptionsContext): Node[] {
         selectInput(draft.inputTargetLang, languageOptions(ctx.ui), (v) => ctx.patch({ inputTargetLang: v }), { "aria-label": t("inputTarget") }),
       ),
     ),
-    group(settingRow(t("everywhere"), t("everywhereDesc"), switchInput(draft.everywhere, (v) => ctx.patch({ everywhere: v }), t("everywhere")))),
   ];
 }
 

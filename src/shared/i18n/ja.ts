@@ -100,7 +100,6 @@ export const ja: Messages = {
   styleBlur: "ぼかし（学習）",
 
   hoverKey: "ホバーキー",
-  hoverKeyDesc: "段落の上で軽く押すか、押したまま移動すると、その段落だけを翻訳します。",
   modCtrl: "Ctrl / Control",
   modAlt: "Alt / Option",
   modShift: "Shift",
@@ -111,7 +110,13 @@ export const ja: Messages = {
   inputTranslationDesc: "入力欄でスペースを 3 回押すと、入力した文章を翻訳します。",
   inputTarget: "入力の翻訳先",
   everywhere: "すべてのサイトで有効にする",
-  everywhereDesc: "オフの場合、翻訳したページと「常に翻訳」のサイトでのみ動作します。すべてのサイトへのアクセスが必要です（保存時に確認）。テキストは操作したときだけ送信されます。",
+  hoverParagraphDesc: "段落にポインタを合わせてこのキーを軽く押すか、押したまま段落の上を動かします。ショートカット {shortcut} でも同じです。",
+  helpersNeedAccess: "以下の機能は、すべてのサイトで有効にしてから使えます。",
+  helpersAccessDesc: "すべてのサイトへのアクセス許可が必要です。テキストを送るのは、これらの機能を使ったときだけです。",
+  enabledEverywhere: "すべてのサイトで有効です",
+  helpersReloadNote: "開いているページは再読み込みすると使えるようになります。",
+  disableEverywhere: "オフにする",
+  accessDenied: "アクセスが許可されませんでした。",
 
   noSites: "まだサイトがありません。下で追加するか、サイトでツールバーのポップアップを開き、「このサイトを常に翻訳」をオンにしてください。",
   addSite: "サイトを追加",

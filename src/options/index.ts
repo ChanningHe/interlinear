@@ -67,7 +67,7 @@ const ctx: OptionsContext = {
   },
   render: () => render(),
   setStatus,
-  persistServices: (update) => persistServices(update),
+  persist: (update, opts) => persist(update, opts),
   tidy: () => void tidy(normalizeSettings(JSON.parse(saved))).catch((e: unknown) => console.warn("[interlinear] tidy:", e)),
 };
 
@@ -78,16 +78,22 @@ async function tidy(s: Settings): Promise<void> {
   await pruneCredentials(s.providers.map((p) => p.id));
 }
 
-/** Applies a services change to the saved settings and saves it now; the draft keeps other edits. */
-function persistServices(update: (saved: Settings) => Pick<Settings, "providers" | "activeProviderId">): void {
+/**
+ * Applies a change to the saved settings and saves it now; the draft keeps its other edits. With
+ * `onlyIfGranted`, nothing is saved unless the browser grants the access the change needs.
+ */
+function persist(update: (saved: Settings) => Partial<Settings>, opts: { readonly onlyIfGranted?: boolean } = {}): void {
   const base = savedSettings();
-  const next = normalizeSettings({ ...base, ...update(base) });
+  const patch = update(base);
+  const next = normalizeSettings({ ...base, ...patch });
   const granted = requestAccess(requiredOrigins(next)); // synchronous call keeps the user gesture
   void (async () => {
     const ok = await granted;
+    if (!ok && opts.onlyIfGranted) return setStatus(t("accessDenied"), "error");
     await saveSettings(next);
     await tidy(next);
-    draft = { ...draft, providers: next.providers, activeProviderId: next.activeProviderId };
+    const changed = Object.fromEntries(Object.keys(patch).map((k) => [k, next[k as keyof Settings]]));
+    draft = { ...draft, ...changed };
     saved = JSON.stringify(next);
     render();
     refreshDirty();

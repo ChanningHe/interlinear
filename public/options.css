@@ -262,7 +262,10 @@ main {
   padding: 16px;
 }
 
-.group.callout > * + * { border-top: 0; } /* one card, not a list of rows */
+.group.callout > * + * { border-top: 0; }
+
+/* The page helpers are off until the user enables site access. */
+.setting.needs-access { background: var(--accent-soft); } /* one card, not a list of rows */
 
 .site-input { width: 220px; }
 
