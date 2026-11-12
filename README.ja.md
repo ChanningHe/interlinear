@@ -21,7 +21,7 @@ Chrome と Firefox 向けの対訳ウェブページ翻訳拡張機能です。�
 [Releases](../../releases) からブラウザに合った zip をダウンロードします。
 
 - Chrome / Edge：zip を展開し、`chrome://extensions` を開いてデベロッパーモードをオンにし、「パッケージ化されていない拡張機能を読み込む」で展開したフォルダを選びます。
-- Firefox 128 以降：`about:debugging#/runtime/this-firefox` を開き、「一時的なアドオンを読み込む」で zip を選びます。一時的なアドオンは Firefox の再起動時に削除されます。
+- Firefox 140 以降：`about:debugging#/runtime/this-firefox` を開き、「一時的なアドオンを読み込む」で zip を選びます。一時的なアドオンは Firefox の再起動時に削除されます。
 
 ソースからビルドする場合（Node.js 22.18 以降）：
 
@@ -49,6 +49,10 @@ CHROMIUM=/path/to/chromium npm run e2e
 ```
 
 リリースするには `just release 1.2.3` を実行します。バージョンを更新し、チェックを実行してからコミットし `v1.2.3` タグを付けます。タグを push するとリリースが公開されます。
+
+## プライバシー
+
+[PRIVACY.md](PRIVACY.md)（英語）をご覧ください。
 
 ## ライセンス
 

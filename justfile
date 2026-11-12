@@ -10,6 +10,11 @@ check:
     npm test
     npm run build
 
+# Build and zip for the stores, plus the source zip AMO asks for (into dist/packages)
+package:
+    npm run build
+    scripts/package.sh
+
 # Set the version everywhere, check, commit and tag it: just release 1.2.3
 release version: (_release-guard version)
     npm version "{{version}}" --no-git-tag-version --allow-same-version

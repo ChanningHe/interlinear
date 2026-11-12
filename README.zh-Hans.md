@@ -21,7 +21,7 @@
 从 [Releases](../../releases) 下载对应浏览器的 zip。
 
 - Chrome / Edge：解压后打开 `chrome://extensions`，开启开发者模式，点击“加载已解压的扩展程序”，选择解压出的文件夹。
-- Firefox 128+：打开 `about:debugging#/runtime/this-firefox`，点击“临时载入附加组件”，选择 zip 文件。Firefox 重启后会移除临时附加组件。
+- Firefox 140+：打开 `about:debugging#/runtime/this-firefox`，点击“临时载入附加组件”，选择 zip 文件。Firefox 重启后会移除临时附加组件。
 
 从源码构建（需要 Node.js 22.18 或更高版本）：
 
@@ -49,6 +49,10 @@ CHROMIUM=/path/to/chromium npm run e2e
 ```
 
 发布新版本时运行 `just release 1.2.3`：它会修改版本号、运行检查、提交并打上 `v1.2.3` 标签，推送标签后会自动发布。
+
+## 隐私
+
+见 [PRIVACY.md](PRIVACY.md)（英文）。
 
 ## 许可证
 

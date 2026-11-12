@@ -69,10 +69,12 @@ function manifest(target) {
       browser_specific_settings: {
         gecko: {
           id: "interlinear@channinghe.github.io",
-          strict_min_version: "128.0",
+          // data_collection_permissions needs Firefox 140 (desktop) / 142 (Android).
+          strict_min_version: "140.0",
           // Page text leaves the device, but only to the endpoint the user configures.
           data_collection_permissions: { required: ["websiteContent"] },
         },
+        gecko_android: { strict_min_version: "142.0" },
       },
     }),
   };
@@ -114,7 +116,7 @@ async function buildTarget(target) {
         outdir,
         bundle: true,
         format: e.format,
-        target: ["chrome120", "firefox128"],
+        target: ["chrome120", "firefox140"],
         // Readable output on purpose: anyone can audit what ships.
         minify: false,
         sourcemap: watch ? "inline" : false,

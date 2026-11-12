@@ -21,7 +21,7 @@ A bilingual web page translator for Chrome and Firefox that sends text only to t
 Download the zip for your browser from [Releases](../../releases).
 
 - Chrome / Edge: unzip it, open `chrome://extensions`, turn on Developer mode, click Load unpacked and select the folder.
-- Firefox 128+: open `about:debugging#/runtime/this-firefox`, click Load Temporary Add-on and select the zip. Firefox removes temporary add-ons when it restarts.
+- Firefox 140+: open `about:debugging#/runtime/this-firefox`, click Load Temporary Add-on and select the zip. Firefox removes temporary add-ons when it restarts.
 
 To build from source (Node.js 22.18 or later):
 
@@ -49,6 +49,10 @@ CHROMIUM=/path/to/chromium npm run e2e
 ```
 
 To release, run `just release 1.2.3`. It sets the version, runs the checks, commits and tags `v1.2.3`; pushing the tag publishes the release.
+
+## Privacy
+
+See [PRIVACY.md](PRIVACY.md).
 
 ## License
 
