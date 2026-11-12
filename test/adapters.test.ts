@@ -15,7 +15,7 @@ import {
   parseCallback,
   refreshCredential,
 } from "../src/providers/chatgpt-auth";
-import { parseModels } from "../src/providers/models";
+import { listModels, parseModels } from "../src/providers/models";
 
 const body = (p: Provider) => adapterOf(p.adapter).body(p.options, p.model);
 const svc = (adapter: Provider["adapter"], patch: Partial<Provider> = {}): Provider => ({ ...newProvider(adapter, "x"), ...patch });
@@ -325,5 +325,22 @@ describe("ChatGPT sign-in", () => {
     expect(await refreshCredential(cred, oddToken as unknown as typeof fetch, NOW)).toMatchObject({ refreshToken: "r3", sub: "s" });
     const revoked = vi.fn(async () => new Response(JSON.stringify({ error: "invalid_grant" }), { status: 400 }));
     await expect(refreshCredential(cred, revoked as unknown as typeof fetch, NOW)).rejects.toBeInstanceOf(SignedOutError);
+  });
+});
+
+describe("listModels", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const custom = svc("custom-openai", { endpoint: "https://llm.example/v1/chat/completions" });
+
+  test("a successful response that is not JSON means no list, so the model ID is typed in", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("I can answer questions about v1/models…", { status: 200, headers: { "content-type": "text/plain" } })));
+    await expect(listModels(custom)).resolves.toEqual([]);
+  });
+
+  test("parses a JSON list and still reports HTTP errors", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ data: [{ id: "m1" }] })));
+    await expect(listModels(custom)).resolves.toEqual([{ id: "m1" }]);
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("nope", { status: 401 })));
+    await expect(listModels(custom)).rejects.toThrow("HTTP 401");
   });
 });

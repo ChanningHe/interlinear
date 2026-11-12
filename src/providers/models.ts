@@ -107,5 +107,8 @@ export async function listModels(p: Provider, opts: { readonly accessToken?: () 
   const token = spec.auth === "oauth" ? await opts.accessToken?.() : undefined;
   const res = await fetch(url, { headers: headersFor(p, token), redirect: "error", signal: AbortSignal.timeout(TIMEOUT_MS) });
   if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return parseModels(spec.models, await res.json());
+  // Some OpenAI-compatible servers answer /models with something other than JSON (ch.at treats it
+  // as a chat prompt). The service itself works, so report "no list" and let the user type the ID.
+  const data: unknown = await res.json().catch(() => null);
+  return parseModels(spec.models, data);
 }
