@@ -129,6 +129,8 @@ export function installHover(deps: HoverDeps): HoverHandle {
   let clean = false;
   /** The press now down began right after a clean tap: it is the second of a double tap. */
   let second = false;
+  /** What was under the pointer when the second press began; hold mode translates it first. */
+  let held: Element | undefined;
   /** When the last clean single tap ended, while it may still become the first of a pair. */
   let lastTap: number | undefined;
 
@@ -137,11 +139,13 @@ export function installHover(deps: HoverDeps): HoverHandle {
     if (!isModifier(e) || !onlyModifier(e, modifier)) return breakChord(); // any other key
     clean = true;
     second = lastTap !== undefined && now() - lastTap <= DOUBLE_TAP_MS;
+    held = second ? getHovered() : undefined;
   };
   const onKeyUp = (e: KeyboardEvent) => {
     if (!trusted(e) || !isModifier(e)) return;
     const [tapped, wasSecond] = [clean, second];
     clean = second = false;
+    held = undefined;
     lastTap = tapped && !wasSecond ? now() : undefined;
     const el = tapped && wasSecond ? getHovered() : undefined;
     if (!el) return;
@@ -151,11 +155,15 @@ export function installHover(deps: HoverDeps): HoverHandle {
   };
   const breakChord = () => {
     clean = second = false;
+    held = undefined;
     lastTap = undefined;
   };
   // Moving onto another paragraph while holding the second press translates that one too.
   const onMouseOver = (e: MouseEvent) => {
     if (!clean || !second || !trusted(e) || !onlyModifier(e, modifier) || !(e.target instanceof Element)) return;
+    // Mouseover only fires on entering an element, so the one the press began on needs its turn.
+    if (held) deps.onTarget(held);
+    held = undefined;
     deps.onTarget(textElementAt(e.clientX, e.clientY, doc) ?? e.target);
   };
   const listeners: [string, EventListener][] = [
