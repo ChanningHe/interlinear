@@ -101,7 +101,9 @@ describe("services in settings", () => {
     expect(validateProvider(svc("openrouter", { model: "m" }))).toEqual(["keyRequired"]);
     expect(validateProvider(svc("chatgpt", { model: "m" }))).toEqual([]);
     expect(validateProvider(svc("ollama", { model: "m" }))).toEqual([]);
-    expect(validateProvider(svc("custom-openai", { model: "m", endpoint: "https://x.example/v1/chat/completions" }))).toEqual(["keyRequired"]);
+    // Custom services may be public and keyless, local or remote.
+    expect(validateProvider(svc("custom-openai", { model: "m", endpoint: "https://x.example/v1/chat/completions" }))).toEqual([]);
+    expect(validateProvider(svc("custom-anthropic", { model: "m", endpoint: "https://x.example/v1/messages" }))).toEqual([]);
   });
 
   test("ChatGPT services also need access to the sign-in host", () => {

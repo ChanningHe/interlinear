@@ -118,7 +118,7 @@ const anthropicWire: Wire = {
   build: (p, req) => ({
     url: p.endpoint,
     headers: {
-      "x-api-key": p.apiKey,
+      ...(p.apiKey ? { "x-api-key": p.apiKey } : {}),
       "anthropic-version": "2023-06-01",
       // Required for requests that carry a browser Origin, which extension workers do.
       "anthropic-dangerous-direct-browser-access": "true",

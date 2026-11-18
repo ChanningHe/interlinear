@@ -93,7 +93,7 @@ export function parseModels(source: ModelSource, data: unknown): ModelInfo[] {
 function headersFor(p: Provider, token?: string): Record<string, string> {
   const spec = adapterOf(p.adapter);
   if (spec.wire === "messages") {
-    return { "x-api-key": p.apiKey, "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" };
+    return { ...(p.apiKey ? { "x-api-key": p.apiKey } : {}), "anthropic-version": "2023-06-01", "anthropic-dangerous-direct-browser-access": "true" };
   }
   const secret = token ?? p.apiKey;
   return secret ? { Authorization: `Bearer ${secret}` } : {};

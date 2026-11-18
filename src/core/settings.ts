@@ -380,10 +380,9 @@ export function validateProvider(p: Provider): ProviderProblem[] {
   }
   if (url && url.protocol !== "https:" && !(url.protocol === "http:" && isLocalUrl(url))) errors.push("endpointInsecure");
   if (!p.model) errors.push("modelRequired");
-  // Sign-in services carry no key; local services need none; everything remote does.
-  const { auth } = adapterOf(p.adapter);
-  const needsKey = auth === "apiKey" || (auth === "optionalKey" && !(url && isLocalUrl(url)));
-  if (needsKey && !p.apiKey) errors.push("keyRequired");
+  // Hosted services need a key; sign-in services carry none; custom services may be keyless
+  // (local models, and public services that take no key).
+  if (adapterOf(p.adapter).auth === "apiKey" && !p.apiKey) errors.push("keyRequired");
   return errors;
 }
 

@@ -95,8 +95,8 @@ describe("validateProvider", () => {
     expect(errors).toContain("modelRequired");
   });
 
-  test("requires api key for remote endpoints", () => {
-    expect(validateProvider({ ...provider, adapter: "custom-openai", options: {}, apiKey: "" })).toContain("keyRequired");
+  test("a custom service needs no api key, even remote (public keyless services)", () => {
+    expect(validateProvider({ ...provider, adapter: "custom-openai", options: {}, apiKey: "" })).not.toContain("keyRequired");
     expect(validateProvider({ ...provider, adapter: "custom-openai", options: {}, endpoint: "not a url" })).toContain("endpointInvalid");
   });
 });
