@@ -40,3 +40,21 @@ describe("code drawn with divs", () => {
     expect(texts(html)).toEqual(["Run npm install before building"]);
   });
 });
+
+describe("short button labels are page chrome in content scope", () => {
+  test("labels wrapped in divs or paragraphs are still control labels", () => {
+    const html = `<main>
+      <button><div><span>Subscribe</span></div></button>
+      <button><div><p>Add a comment</p></div></button>
+      <div role="button" tabindex="0"><div>Load more</div></div>
+      <p>Article body text</p></main>`;
+    expect(texts(html, true)).toEqual(["Article body text"]);
+  });
+
+  test("clickable cards with a heading or long text stay content", () => {
+    const html = `<main>
+      <div role="button" tabindex="0"><h3>Card title</h3></div>
+      <div role="button" tabindex="0"><p>A long clickable card that holds real post content inside it</p></div></main>`;
+    expect(texts(html, true)).toEqual(["Card title", "A long clickable card that holds real post content inside it"]);
+  });
+});

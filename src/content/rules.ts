@@ -157,15 +157,18 @@ export function isNoise(el: Element, style: CSSStyleDeclaration): boolean {
 const CHROME_ROLES: ReadonlySet<string> = new Set([
   "navigation", "banner", "contentinfo", "search", "toolbar", "menubar", "tablist",
 ]);
-/** A button with block content or more text than this is a clickable card, not a control label. */
+/** A button with more text than this is a clickable card, not a control label. */
 const MAX_BUTTON_LABEL = 60;
-const CARD_CONTENT = "p,div,section,article,li,h1,h2,h3,h4,h5,h6";
+/** Design systems wrap labels in divs and paragraphs; with block content, only text this short is a label. */
+const MAX_WRAPPED_LABEL = 30;
+const CARD_CONTENT = "p,div,section,article,li";
 const HEADING = "h1,h2,h3,h4,h5,h6,[role=heading]";
 
 /** Short control labels; not accordion headings (<h3><button>Question?</button></h3>) or clickable cards. */
 function isControlLabel(el: Element): boolean {
-  if (el.closest(HEADING) !== null || el.querySelector(CARD_CONTENT) !== null) return false;
-  return (el.textContent ?? "").trim().length <= MAX_BUTTON_LABEL;
+  if (el.closest(HEADING) !== null || el.querySelector(HEADING) !== null) return false;
+  const length = (el.textContent ?? "").trim().length;
+  return length <= (el.querySelector(CARD_CONTENT) === null ? MAX_BUTTON_LABEL : MAX_WRAPPED_LABEL);
 }
 
 /** A row or list of this many short links or more is a menu, whatever its markup. */
