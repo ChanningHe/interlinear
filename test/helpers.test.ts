@@ -167,7 +167,7 @@ describe("input box translation", () => {
   });
 
   test("the third quick Space triggers and is not typed", () => {
-    document.body.innerHTML = "<input id='f'>";
+    document.body.innerHTML = "<input id='f' value='hello  '>";
     const f = document.getElementById("f")!;
     let t = 0;
     const onTrigger = vi.fn();
@@ -221,6 +221,7 @@ describe("input box translation", () => {
     document.body.innerHTML = "<textarea id='f'></textarea>";
     const f = document.getElementById("f") as HTMLTextAreaElement;
     f.value = "你好世界  ";
+    f.focus();
     const onInput = vi.fn();
     f.addEventListener("input", onInput);
     const translate = vi.fn(async () => ({ ok: true as const, text: "Hello world" }));
