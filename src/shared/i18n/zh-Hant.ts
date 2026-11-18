@@ -311,7 +311,8 @@ export const zhHant: Messages = {
   errStream: "服務在傳回結果時出錯。",
   errFailed: "翻譯失敗。",
   errNoResult: "沒有收到譯文。",
-  errExtension: "擴充功能沒有回應，請重新整理頁面後再試。",
+  errTimeout: "服務回應逾時，請稍後再試。",
+  errExtension: "擴充功能沒有回應，請再試一次；若仍失敗，請重新整理頁面。",
   menuPage: "翻譯頁面 / 顯示原文",
   menuSelection: "翻譯「%s」",
 };

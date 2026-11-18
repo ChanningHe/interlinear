@@ -311,7 +311,8 @@ export const ja: Messages = {
   errStream: "サービスが応答の途中でエラーを報告しました。",
   errFailed: "翻訳に失敗しました。",
   errNoResult: "訳文が返ってきませんでした。",
-  errExtension: "拡張機能が応答しません。ページを再読み込みしてもう一度お試しください。",
+  errTimeout: "サービスの応答がタイムアウトしました。しばらくしてから再試行してください。",
+  errExtension: "拡張機能が応答しません。もう一度お試しください。解決しない場合はページを再読み込みしてください。",
   menuPage: "ページを翻訳 / 原文を表示",
   menuSelection: "「%s」を翻訳",
 };

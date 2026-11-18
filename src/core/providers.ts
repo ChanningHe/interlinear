@@ -340,7 +340,7 @@ function guarded(res: Response, arm: (ms: number) => void): Response {
 }
 
 // Not retried: a service that went quiet for this long is unlikely to answer the same request sooner.
-const timedOut = () => new ProviderError("The service did not respond in time", false, { code: "errNoResult" });
+const timedOut = () => new ProviderError("The service did not respond in time", false, { code: "errTimeout" });
 const aborted = () => new ProviderError("Request aborted", false);
 
 async function attempt(wire: Wire, p: Provider, req: ChatRequest, opts: CompleteOptions): Promise<string> {

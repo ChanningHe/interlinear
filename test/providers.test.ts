@@ -284,13 +284,13 @@ describe("timeouts", () => {
   afterEach(() => vi.useRealTimers());
   const delta = (t: string) => `data: ${JSON.stringify({ choices: [{ delta: { content: t } }] })}\n\n`;
 
-  test("a service that never answers fails once, as no result, not as a network error", async () => {
+  test("a service that never answers fails once, as a timeout, not as a network error", async () => {
     vi.useFakeTimers();
     const fetchFn = hangingFetch();
     vi.stubGlobal("fetch", fetchFn);
     const result = complete(openai, req, noSleep).catch((e: unknown) => e);
     await vi.advanceTimersByTimeAsync(10 * 60_000);
-    expect(await result).toMatchObject({ code: "errNoResult", retryable: false });
+    expect(await result).toMatchObject({ code: "errTimeout", retryable: false });
     expect(fetchFn).toHaveBeenCalledTimes(1);
   });
 
@@ -299,7 +299,7 @@ describe("timeouts", () => {
     vi.stubGlobal("fetch", slowFetch([delta("a")], 10, true));
     const result = complete(openai, req, noSleep).catch((e: unknown) => e);
     await vi.advanceTimersByTimeAsync(10 * 60_000);
-    expect(await result).toMatchObject({ code: "errNoResult" });
+    expect(await result).toMatchObject({ code: "errTimeout" });
   });
 
   test("a slow stream that keeps producing is never cut", async () => {

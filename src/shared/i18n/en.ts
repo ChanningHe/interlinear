@@ -327,7 +327,8 @@ export const en = {
   errStream: "The service reported an error while responding.",
   errFailed: "Translation failed.",
   errNoResult: "No translation came back.",
-  errExtension: "The extension stopped responding. Reload the page and try again.",
+  errTimeout: "The service took too long to respond. Try again later.",
+  errExtension: "The extension stopped responding. Try again; if it keeps failing, reload the page.",
   menuPage: "Translate page / show original",
   menuSelection: "Translate “%s”",
 } as const;

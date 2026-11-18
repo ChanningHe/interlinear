@@ -66,6 +66,7 @@ export const ERROR_CODES = [
   "errStream",
   "errFailed",
   "errNoResult",
+  "errTimeout",
   "errExtension",
 ] as const satisfies readonly MessageKey[];
 

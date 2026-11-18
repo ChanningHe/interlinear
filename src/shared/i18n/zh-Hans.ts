@@ -311,7 +311,8 @@ export const zhHans: Messages = {
   errStream: "服务在返回结果时出错。",
   errFailed: "翻译失败。",
   errNoResult: "没有收到译文。",
-  errExtension: "扩展没有响应，请刷新页面后重试。",
+  errTimeout: "服务响应超时，请稍后重试。",
+  errExtension: "扩展没有响应，请重试；如仍失败，请刷新页面。",
   menuPage: "翻译页面 / 显示原文",
   menuSelection: "翻译“%s”",
 };
