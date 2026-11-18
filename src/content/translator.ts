@@ -376,6 +376,12 @@ export function createPageTranslator(deps: PageTranslatorDeps) {
     requeue(again);
   }
 
+  /**
+   * Paragraphs a feed has since removed are dropped: a virtualised list keeps replacing them, and
+   * holding every one until the user resumes would grow without bound.
+   */
+  const stillShown = (units: readonly Unit[]) => units.filter((u) => u.host.isConnected);
+
   function enqueue(u: Unit): void {
     const followers = waiting.get(u.text);
     if (followers) {
@@ -384,7 +390,7 @@ export function createPageTranslator(deps: PageTranslatorDeps) {
     }
     const wrapper = tracked.get(anchorOf(u))?.wrapper;
     if (wrapper && spent + u.text.length > allowance) {
-      paused = [...paused, u];
+      paused = [...stillShown(paused), u];
       showError(wrapper, pausedView, resumePaused);
       return;
     }
@@ -422,7 +428,7 @@ export function createPageTranslator(deps: PageTranslatorDeps) {
       if (mode !== "translation-only" || !hideOriginalsOf(u.host)) fitLater(u);
       return;
     }
-    failed = [...failed, u];
+    failed = [...stillShown(failed), u];
     showError(wrapper, retryView(r.error), retryFailed);
   }
 
