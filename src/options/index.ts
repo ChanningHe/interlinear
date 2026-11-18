@@ -1,5 +1,7 @@
 import {
+  STORAGE_KEY,
   loadSettings,
+  mergeRemote,
   normalizeSettings,
   requiredOrigins,
   revokeUnusedOrigins,
@@ -149,6 +151,19 @@ function render(): void {
   sections.forEach((s) => spy.observe(s));
   if (focusedId) document.getElementById(focusedId)?.focus({ preventScroll: true });
 }
+
+// Saves from elsewhere (the popup, another options tab) must neither be overwritten by the next
+// Save nor wipe edits made here: fields not edited locally follow the remote value.
+chrome.storage.onChanged.addListener((changes, area) => {
+  const change = area === "local" ? changes[STORAGE_KEY] : undefined;
+  if (!change) return;
+  const remote = normalizeSettings(change.newValue);
+  if (JSON.stringify(remote) === saved) return;
+  draft = mergeRemote(draft, savedSettings(), remote);
+  saved = JSON.stringify(remote);
+  render();
+  refreshDirty();
+});
 
 saveButton.addEventListener("click", () => {
   const next = normalizeSettings(draft);

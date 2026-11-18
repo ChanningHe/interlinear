@@ -13,6 +13,9 @@ import {
   requiredOrigins,
   residentMatches,
   siteFromInput,
+  ImportError,
+  mergeRemote,
+  parseGlossaryText,
   siteOrigin,
   validateProvider,
 } from "../src/core/settings";
@@ -163,14 +166,21 @@ describe("siteFromInput", () => {
     ["example.com", "https://example.com"],
     ["  www.reddit.com/r/rust/  ", "https://www.reddit.com"],
     ["http://localhost:8080/app", "http://localhost:8080"],
-    ["localhost:3000", "https://localhost:3000"],
+    ["localhost:3000", "http://localhost:3000"],
+    ["localhost", "http://localhost"],
+    ["192.168.1.1", "http://192.168.1.1"],
+    ["https://localhost", "https://localhost"],
+    ["-x.com", undefined],
+    ["x-.com", undefined],
+    ["a.-b.com", undefined],
+    ["a-b.com", "https://a-b.com"],
     ["about:blank", undefined],
     ["HTTPS://News.YCombinator.com", "https://news.ycombinator.com"],
     ["", undefined],
     ["not a site", undefined],
     ["exa%20mple.com", undefined],
     ["例子.中国", "https://xn--fsqu00a.xn--fiqs8s"],
-    ["[::1]:8080", "https://[::1]:8080"],
+    ["[::1]:8080", "http://[::1]:8080"],
     ["ftp://example.com", undefined],
     ["chrome://extensions", undefined],
   ])("%j → %s", (text, origin) => {
@@ -231,7 +241,16 @@ describe("export / import", () => {
   });
 
   test("import rejects files that are not JSON", () => {
-    expect(() => importSettings("not json", current)).toThrow();
+    expect(() => importSettings("not json", current)).toThrow(ImportError);
+  });
+
+  test.each(["[1,2]", "null", "42", "{}", '{"foo":1}', '{"providers":"x"}', '{"glossary":{}}'])("import rejects %s", (json) => {
+    expect(() => importSettings(json, current)).toThrow(ImportError);
+  });
+
+  test("a partial file changes only the fields it has", () => {
+    const imported = importSettings(JSON.stringify({ style: "bold" }), current);
+    expect(imported).toEqual({ ...current, style: "bold" });
   });
 });
 
@@ -243,8 +262,38 @@ describe("glossary text format", () => {
     ]);
   });
 
+  test("reports every ignored line with its reason", () => {
+    const long = "x".repeat(GLOSSARY_LIMITS.chars + 1);
+    const text = ["a = b", "no equals", "= x", "y =", "A = c", `${long} = z`, "", "  "].join("\n");
+    const { entries, ignored } = parseGlossaryText(text);
+    expect(entries).toEqual([{ source: "a", target: "b" }]);
+    expect(ignored).toEqual({ invalid: 3, tooLong: 1, duplicate: 1, overLimit: 0 });
+  });
+
+  test("reports entries beyond the limit", () => {
+    const text = Array.from({ length: GLOSSARY_LIMITS.entries + 3 }, (_, i) => `t${i} = u`).join("\n");
+    const { entries, ignored } = parseGlossaryText(text);
+    expect(entries).toHaveLength(GLOSSARY_LIMITS.entries);
+    expect(ignored.overLimit).toBe(3);
+  });
+
   test("formats back to the same text", () => {
     const g = [{ source: "a", target: "b" }];
     expect(parseGlossary(formatGlossary(g))).toEqual(g);
+  });
+});
+
+describe("mergeRemote", () => {
+  const before = normalizeSettings({ targetLang: "ja", style: "plain", displayMode: "bilingual" });
+
+  test("takes remote changes for fields the draft has not edited and keeps local edits", () => {
+    const draft = { ...before, style: "bold" as const };
+    const after = { ...before, targetLang: "fr", displayMode: "translation-only" as const, style: "italic" as const };
+    expect(mergeRemote(draft, before, after)).toEqual({ ...after, style: "bold" });
+  });
+
+  test("an untouched draft becomes the remote settings", () => {
+    const after = { ...before, targetLang: "de" };
+    expect(mergeRemote(before, before, after)).toEqual(after);
   });
 });

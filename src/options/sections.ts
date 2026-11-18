@@ -4,11 +4,14 @@ import {
   LIMITS,
   exportSettings,
   formatGlossary,
+  ImportError,
   importSettings,
   normalizeSettings,
-  parseGlossary,
+  parseGlossaryText,
   siteFromInput,
   type DisplayStyle,
+  type GlossaryEntry,
+  type GlossaryIgnored,
   type HoverModifier,
   type Provider,
   type Settings,
@@ -47,7 +50,8 @@ export interface OptionsContext {
   setStatus(text: string, kind?: StatusKind): void;
   /**
    * Saves a change at once (services, site access); call synchronously inside a click. `update`
-   * gets the saved settings, so unsaved edits elsewhere on the page are neither saved nor lost.
+   * gets the saved settings, so unsaved edits elsewhere on the page are neither saved nor lost
+   * (the service list is the exception: it is saved as shown, see services.ts).
    */
   persist(update: (saved: Settings) => Partial<Settings>, opts?: { readonly onlyIfGranted?: boolean }): void;
   /** Revokes host access and sign-ins nothing saved still uses (a drawer was closed). */
@@ -115,20 +119,54 @@ function send<T>(msg: BackgroundRequest): Promise<T> {
 
 // ---- Translation ----------------------------------------------------------------------------
 
+/** What the glossary textarea shows. Kept across re-renders so half-typed lines survive. */
+let glossaryView: { readonly text: string; readonly entries: readonly GlossaryEntry[] } | undefined;
+
+/** "Ignored lines: …" for what the parser dropped; empty when nothing was. */
+function glossaryNote(t: Translate, ignored: GlossaryIgnored): string {
+  const { chars, entries } = GLOSSARY_LIMITS;
+  const parts: [number, MessageKey, number][] = [
+    [ignored.invalid, "glossaryIgnoredInvalid", 0],
+    [ignored.tooLong, "glossaryIgnoredTooLong", chars],
+    [ignored.duplicate, "glossaryIgnoredDuplicate", 0],
+    [ignored.overLimit, "glossaryIgnoredOverLimit", entries],
+  ];
+  const details = parts.filter(([count]) => count > 0).map(([count, key, max]) => t(key, { count, max }));
+  return details.length > 0 ? t("glossaryIgnored", { details: details.join(" · ") }) : "";
+}
+
+function glossaryEditor(ctx: OptionsContext): HTMLElement {
+  const { draft, t } = ctx;
+  // The view is stale once the draft's glossary differs from what it parsed to (discard, import, sync).
+  const view = glossaryView;
+  const text = view && JSON.stringify(view.entries) === JSON.stringify(draft.glossary) ? view.text : formatGlossary(draft.glossary);
+  const note = h("div", { class: "status muted" });
+  const showNote = (value: string) => showStatus(note, glossaryNote(t, parseGlossaryText(value).ignored));
+  const area = h("textarea", {
+    value: text,
+    placeholder: t("glossaryPlaceholder"),
+    "aria-label": t("glossary"),
+    onInput: (e: Event) => {
+      const value = (e.target as HTMLTextAreaElement).value;
+      const { entries } = parseGlossaryText(value);
+      glossaryView = { text: value, entries };
+      ctx.patch({ glossary: entries });
+      showNote(value);
+    },
+  });
+  showNote(text);
+  return h("div", {}, area, note);
+}
+
 function translationSection(ctx: OptionsContext): Node[] {
   const { draft, t } = ctx;
   const prompt = h("textarea", {
     value: draft.customPrompt,
-    placeholder: "You are a professional translator. Translate the user's text into {{to}} so it reads naturally to a native speaker.",
+    placeholder: t("customPromptPlaceholder"),
     "aria-label": t("customInstructions"),
     onInput: (e: Event) => ctx.patch({ customPrompt: (e.target as HTMLTextAreaElement).value }),
   });
-  const glossary = h("textarea", {
-    value: formatGlossary(draft.glossary),
-    placeholder: "Kubernetes = Kubernetes\npull request = 拉取请求",
-    "aria-label": t("glossary"),
-    onInput: (e: Event) => ctx.patch({ glossary: parseGlossary((e.target as HTMLTextAreaElement).value) }),
-  });
+  const glossary = glossaryEditor(ctx);
   return [
     group(
       settingRow(
@@ -234,10 +272,10 @@ function helperAccess(ctx: OptionsContext): HTMLElement {
 function helpersSection(ctx: OptionsContext): Node[] {
   const { draft, t } = ctx;
   // One feature with two triggers: the key below, or the browser shortcut that works anywhere.
-  const hoverDesc = h("span", {}, t("hoverParagraphDesc", { shortcut: "…" }));
+  const hoverDesc = h("span", {}, t("hoverParagraphDescNoShortcut"));
   void chrome.commands.getAll().then((commands) => {
-    const shortcut = commands.find((c) => c.name === HOVER_COMMAND)?.shortcut || t("notSet");
-    hoverDesc.textContent = t("hoverParagraphDesc", { shortcut });
+    const shortcut = commands.find((c) => c.name === HOVER_COMMAND)?.shortcut;
+    if (shortcut) hoverDesc.textContent = t("hoverParagraphDesc", { shortcut });
   });
   return [
     helperAccess(ctx),
@@ -365,7 +403,7 @@ function backupRows(ctx: OptionsContext): HTMLElement[] {
         ctx.replace(importSettings(text, ctx.draft));
         ctx.setStatus(t("imported"), "ok");
       })
-      .catch((e: unknown) => showStatus(out, t("importFailed", { error: String(e) }), "error"));
+      .catch((e: unknown) => showStatus(out, e instanceof ImportError ? t("importInvalid") : t("importFailed", { error: String(e) }), "error"));
   });
   return [
     settingRow(
@@ -389,12 +427,13 @@ function advancedSection(ctx: OptionsContext): Node[] {
     send<{ ok?: boolean; error?: string }>({ type: "clear-cache" })
       .then((res) => showStatus(cacheStatus, res.ok ? t("cacheCleared") : (res.error ?? t("failed")), res.ok ? "ok" : "error"))
       .catch((e: unknown) => showStatus(cacheStatus, String(e), "error"));
-  const number = (key: keyof typeof LIMITS) => numberInput(draft[key], (v) => ctx.patch({ [key]: v }), LIMITS[key].min, LIMITS[key].max);
+  const number = (key: keyof typeof LIMITS, label: MessageKey) =>
+    numberInput(draft[key], (v) => ctx.patch({ [key]: v }), LIMITS[key].min, LIMITS[key].max, t(label));
   return [
     group(
-      settingRow(t("charsPerRequest"), t("charsPerRequestDesc"), number("maxCharsPerBatch")),
-      settingRow(t("itemsPerRequest"), null, number("maxItemsPerBatch")),
-      settingRow(t("parallelRequests"), t("parallelRequestsDesc"), number("concurrency")),
+      settingRow(t("charsPerRequest"), t("charsPerRequestDesc"), number("maxCharsPerBatch", "charsPerRequest")),
+      settingRow(t("itemsPerRequest"), null, number("maxItemsPerBatch", "itemsPerRequest")),
+      settingRow(t("parallelRequests"), t("parallelRequestsDesc"), number("concurrency", "parallelRequests")),
     ),
     group(settingRow(t("cache"), cacheStatus, h("button", { onClick: () => void clear() }, t("clearCache"))), ...backupRows(ctx)),
   ];

@@ -75,6 +75,13 @@ export const en = {
   pageContextDesc: "Helps word choice. Cached translations then become per page.",
   glossary: "Glossary",
   glossaryDesc: 'One "term = translation" per line, up to {max}. Only terms that appear in a request are sent.',
+  glossaryPlaceholder: "Kubernetes = Kubernetes\npull request = demande de fusion",
+  glossaryIgnored: "Ignored lines: {details}.",
+  glossaryIgnoredInvalid: "not in \"term = translation\" form: {count}",
+  glossaryIgnoredTooLong: "over {max} characters: {count}",
+  glossaryIgnoredDuplicate: "repeated term: {count}",
+  glossaryIgnoredOverLimit: "beyond the {max}-entry limit: {count}",
+  customPromptPlaceholder: "You are a professional translator. Translate the user's text into {{to}} so it reads naturally to a native speaker.",
   customInstructions: "Custom instructions",
   customInstructionsDesc:
     "Replaces the default role line; {{to}} is the target language. Placeholder and batching rules are always appended.",
@@ -119,6 +126,7 @@ export const en = {
   inputTranslationDesc: "Press Space three times in a text field to translate what you typed.",
   everywhere: "Enable on every website",
   hoverParagraphDesc: "Double-tap the key with the pointer over a paragraph; hold the second press and move to translate more. The {shortcut} shortcut does the same.",
+  hoverParagraphDescNoShortcut: "Double-tap the key with the pointer over a paragraph; hold the second press and move to translate more.",
   helpersNeedAccess: "These work only after you enable them on every website.",
   helpersAccessDesc: "Needs access to all websites. Text is still sent only when you use one of them.",
   enabledEverywhere: "Enabled on every website",
@@ -167,6 +175,7 @@ export const en = {
   importSettings: "Import settings",
   importAction: "Import…",
   imported: "Imported. Review the settings, then click Save.",
+  importInvalid: "This is not a settings file exported from interlinear.",
   importFailed: "Import failed: {error}",
 
   // privacy
@@ -187,6 +196,7 @@ export const en = {
   alwaysTranslateNamed: "Always translate {host}",
   siteDenied: "Access to this site was not granted.",
   unconfigured: "Add your own model endpoint and API key to start translating.",
+  pageUnsupported: "This page cannot be translated.",
   hintMode: "switch view",
   hintHover: "translate paragraph",
   popupLoadFailed: "Failed to load: {error}",
@@ -240,6 +250,9 @@ export const en = {
   signingIn: "Waiting for you to finish signing in…",
   signOut: "Sign out",
   manageUsage: "Manage usage at chatgpt.com",
+  signInCancelled: "Sign-in was cancelled.",
+  signInTimedOut: "Sign-in timed out.",
+  signInNoTab: "Could not open the sign-in page.",
   signInFirst: "Sign in to choose a model.",
 
   // service types and their options

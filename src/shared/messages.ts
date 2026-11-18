@@ -83,6 +83,9 @@ export interface TabState {
   readonly mode?: DisplayMode;
 }
 
+/** Error text of a toggle on a page the extension cannot run in (chrome://, the web store…); popups translate it. */
+export const UNSUPPORTED_PAGE = "unsupported-page";
+
 /** Keyboard command ids; must match "commands" in scripts/build.mjs. */
 export const TOGGLE_COMMAND = "toggle-translation";
 export const MODE_COMMAND = "toggle-display-mode";

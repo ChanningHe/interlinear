@@ -69,6 +69,13 @@ export const ja: Messages = {
   pageContextDesc: "訳語の選択に役立ちます。キャッシュはページごとになります。",
   glossary: "用語集",
   glossaryDesc: "1 行に 1 つ「用語 = 訳語」、最大 {max} 件。リクエストに含まれる用語だけが送信されます。",
+  glossaryPlaceholder: "Kubernetes = Kubernetes\npull request = プルリクエスト",
+  glossaryIgnored: "無視された行：{details}。",
+  glossaryIgnoredInvalid: "「用語 = 訳語」の形式ではない行：{count}",
+  glossaryIgnoredTooLong: "{max} 文字を超える行：{count}",
+  glossaryIgnoredDuplicate: "用語の重複：{count}",
+  glossaryIgnoredOverLimit: "{max} 件の上限を超えた分：{count}",
+  customPromptPlaceholder: "あなたはプロの翻訳者です。ユーザーのテキストを {{to}} に翻訳し、ネイティブが読んで自然な文章にしてください。",
   customInstructions: "カスタム指示",
   customInstructionsDesc: "既定の役割の説明を置き換えます。{{to}} は翻訳先の言語です。プレースホルダーと分割のルールは常に追加されます。",
 
@@ -110,6 +117,7 @@ export const ja: Messages = {
   inputTranslationDesc: "入力欄でスペースを 3 回押すと、入力した文章を翻訳します。",
   everywhere: "すべてのサイトで有効にする",
   hoverParagraphDesc: "段落にポインタを合わせてこのキーを素早く 2 回押します。2 回目を押したまま動かすと、通った段落も翻訳します。ショートカット {shortcut} でも同じです。",
+  hoverParagraphDescNoShortcut: "段落にポインタを合わせてこのキーを素早く 2 回押します。2 回目を押したまま動かすと、通った段落も翻訳します。",
   helpersNeedAccess: "以下の機能は、すべてのサイトで有効にしてから使えます。",
   helpersAccessDesc: "すべてのサイトへのアクセス許可が必要です。テキストを送るのは、これらの機能を使ったときだけです。",
   enabledEverywhere: "すべてのサイトで有効です",
@@ -155,6 +163,7 @@ export const ja: Messages = {
   importSettings: "設定をインポート",
   importAction: "インポート…",
   imported: "インポートしました。設定を確認して保存してください。",
+  importInvalid: "interlinear からエクスポートした設定ファイルではありません。",
   importFailed: "インポートに失敗しました：{error}",
 
   privacyTelemetry: "テレメトリ、アカウント、リモート設定はありません。",
@@ -172,6 +181,7 @@ export const ja: Messages = {
   alwaysTranslateNamed: "{host} を常に翻訳",
   siteDenied: "このサイトへのアクセスが許可されませんでした。",
   unconfigured: "自分のモデルのエンドポイントと API キーを追加すると翻訳を始められます。",
+  pageUnsupported: "このページは翻訳できません。",
   hintMode: "表示を切り替え",
   hintHover: "段落を翻訳",
   popupLoadFailed: "読み込みに失敗しました：{error}",
@@ -225,6 +235,9 @@ export const ja: Messages = {
   signingIn: "ログインの完了を待っています…",
   signOut: "ログアウト",
   manageUsage: "chatgpt.com で利用量を管理",
+  signInCancelled: "ログインがキャンセルされました。",
+  signInTimedOut: "ログインがタイムアウトしました。",
+  signInNoTab: "ログインページを開けませんでした。",
   signInFirst: "ログインするとモデルを選べます。",
 
   // service types and their options

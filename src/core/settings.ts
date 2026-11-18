@@ -172,13 +172,22 @@ export function siteOrigin(url: string): string | undefined {
 }
 
 /** Host names (IDNs arrive as punycode) and IP literals; browsers accept more, e.g. "%20". */
-const HOSTNAME_RE = /^(\[[\da-f:.]+\]|[a-z\d-]+(\.[a-z\d-]+)*)$/i;
+const LABEL = "[a-z\\d](?:[a-z\\d-]*[a-z\\d])?"; // no leading or trailing hyphen
+const HOSTNAME_RE = new RegExp(`^(\\[[\\da-f:.]+\\]|${LABEL}(\\.${LABEL})*)$`, "i");
+/** Hosts a developer reaches over plain http: localhost, IPv4 and IPv6 literals. */
+const isLocalHostName = (host: string) => host === "localhost" || host.endsWith(".localhost") || /^(\d+(\.\d+){3}|\[.*\])$/.test(host);
 
-/** The origin of an address typed by the user; "example.com" means https. */
+/**
+ * The origin of an address typed by the user. Without a scheme, "example.com" means https and
+ * "localhost" or an IP address means http, which is what dev servers speak (sites match by exact origin).
+ */
 export function siteFromInput(text: string): string | undefined {
   const value = text.trim();
   if (!value || /\s/.test(value)) return undefined;
-  const origin = siteOrigin(/^[a-z][a-z\d+.-]*:\/\//i.test(value) ? value : `https://${value}`);
+  const hasScheme = /^[a-z][a-z\d+.-]*:\/\//i.test(value);
+  const probe = hasScheme ? undefined : siteOrigin(`http://${value}`);
+  const isLocal = probe !== undefined && isLocalHostName(new URL(probe).hostname);
+  const origin = siteOrigin(hasScheme ? value : `${isLocal ? "http" : "https"}://${value}`);
   return origin && HOSTNAME_RE.test(new URL(origin).hostname) ? origin : undefined;
 }
 
@@ -188,21 +197,38 @@ function normalizeSites(raw: unknown): string[] {
   return [...new Set(origins.filter((o): o is string => o !== undefined))].slice(0, MAX_AUTO_SITES);
 }
 
-function normalizeGlossary(raw: unknown): GlossaryEntry[] {
-  if (!Array.isArray(raw)) return [];
+/** Why glossary entries were left out, as counts. */
+export interface GlossaryIgnored {
+  /** Not "term = translation": no "=", or an empty side. */
+  readonly invalid: number;
+  readonly tooLong: number;
+  /** Same term (case-insensitive) as an earlier entry. */
+  readonly duplicate: number;
+  /** Beyond the entry limit. */
+  readonly overLimit: number;
+}
+
+function collectGlossary(raw: readonly unknown[]): { entries: GlossaryEntry[]; ignored: GlossaryIgnored } {
   const seen = new Set<string>();
   const entries: GlossaryEntry[] = [];
+  const ignored = { invalid: 0, tooLong: 0, duplicate: 0, overLimit: 0 };
   for (const item of raw) {
-    if (!isObject(item)) continue;
-    const source = str(item.source, "").replace(/\s+/g, " ").trim();
-    const target = str(item.target, "").replace(/\s+/g, " ").trim();
-    const key = source.toLowerCase();
-    const fits = source.length <= GLOSSARY_LIMITS.chars && target.length <= GLOSSARY_LIMITS.chars;
-    if (!source || !target || !fits || seen.has(key)) continue;
-    seen.add(key);
-    entries.push({ source, target });
+    const source = isObject(item) ? str(item.source, "").replace(/\s+/g, " ").trim() : "";
+    const target = isObject(item) ? str(item.target, "").replace(/\s+/g, " ").trim() : "";
+    if (!source || !target) ignored.invalid++;
+    else if (source.length > GLOSSARY_LIMITS.chars || target.length > GLOSSARY_LIMITS.chars) ignored.tooLong++;
+    else if (seen.has(source.toLowerCase())) ignored.duplicate++;
+    else if (entries.length >= GLOSSARY_LIMITS.entries) ignored.overLimit++;
+    else {
+      seen.add(source.toLowerCase());
+      entries.push({ source, target });
+    }
   }
-  return entries.slice(0, GLOSSARY_LIMITS.entries);
+  return { entries, ignored };
+}
+
+function normalizeGlossary(raw: unknown): GlossaryEntry[] {
+  return Array.isArray(raw) ? collectGlossary(raw).entries : [];
 }
 
 const bool = (v: unknown, fallback: boolean) => (typeof v === "boolean" ? v : fallback);
@@ -299,18 +325,46 @@ function sameService(a: Provider, b: Provider): boolean {
   }
 }
 
+/** The file is not JSON, or does not look like an exported settings file. */
+export class ImportError extends Error {}
+
+const SETTINGS_KEYS = new Set<string>(Object.keys(DEFAULT_SETTINGS));
+const LIST_KEYS = ["providers", "autoSites", "glossary"] as const;
+
 /**
- * Parses an exported file. A provider imported without a key keeps the key already stored for
- * the same service, so sharing a key-less export does not wipe anyone's credentials. A file that
- * reuses a provider id with another endpoint gets no key: it could otherwise send it elsewhere.
+ * Parses an exported file and applies it on top of the current settings, so a partial file
+ * changes only what it contains. Anything that does not look like a settings file is refused.
+ * A provider imported without a key keeps the key already stored for the same service, so sharing
+ * a key-less export does not wipe anyone's credentials. A file that reuses a provider id with
+ * another endpoint gets no key: it could otherwise send it elsewhere.
  */
 export function importSettings(json: string, current: Settings): Settings {
-  const imported = normalizeSettings(JSON.parse(json));
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    throw new ImportError("not JSON");
+  }
+  const known = isObject(parsed) && Object.keys(parsed).some((k) => SETTINGS_KEYS.has(k));
+  if (!isObject(parsed) || !known || LIST_KEYS.some((k) => k in parsed && !Array.isArray(parsed[k]))) {
+    throw new ImportError("not a settings file");
+  }
+  const imported = normalizeSettings({ ...current, ...parsed });
   const keyFor = (p: Provider) => current.providers.find((c) => sameService(c, p))?.apiKey ?? "";
   return {
     ...imported,
     providers: imported.providers.map((p) => (p.apiKey ? p : { ...p, apiKey: keyFor(p) })),
   };
+}
+
+/**
+ * Applies a save made elsewhere (the popup, another options tab): fields the draft has not
+ * edited since `before` follow `after`; locally edited fields keep the draft's value.
+ */
+export function mergeRemote(draft: Settings, before: Settings, after: Settings): Settings {
+  const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+  const keys = Object.keys(after) as (keyof Settings)[];
+  return Object.fromEntries(keys.map((k) => [k, same(draft[k], before[k]) ? after[k] : draft[k]])) as unknown as Settings;
 }
 
 export type ProviderProblem = Extract<MessageKey, "endpointInvalid" | "endpointInsecure" | "modelRequired" | "keyRequired">;
@@ -350,14 +404,19 @@ export async function revokeUnusedOrigins(s: Settings): Promise<void> {
   if (unused.length > 0) await chrome.permissions.remove({ origins: unused });
 }
 
-/** One "source = target" pair per line, as edited in the options page. */
-export function parseGlossary(text: string): GlossaryEntry[] {
-  const pairs = text.split("\n").flatMap((line) => {
-    const at = line.indexOf("=");
-    return at > 0 ? [{ source: line.slice(0, at), target: line.slice(at + 1) }] : [];
-  });
-  return normalizeGlossary(pairs);
+/** One "source = target" pair per line, as edited in the options page; blank lines are not entries. */
+export function parseGlossaryText(text: string): { entries: GlossaryEntry[]; ignored: GlossaryIgnored } {
+  const pairs = text
+    .split("\n")
+    .filter((line) => line.trim() !== "")
+    .map((line) => {
+      const at = line.indexOf("=");
+      return at > 0 ? { source: line.slice(0, at), target: line.slice(at + 1) } : null;
+    });
+  return collectGlossary(pairs);
 }
+
+export const parseGlossary = (text: string): GlossaryEntry[] => parseGlossaryText(text).entries;
 
 export function formatGlossary(glossary: readonly GlossaryEntry[]): string {
   return glossary.map((g) => `${g.source} = ${g.target}`).join("\n");

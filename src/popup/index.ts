@@ -1,5 +1,7 @@
 import {
+  STORAGE_KEY,
   loadSettings,
+  normalizeSettings,
   originPattern,
   revokeUnusedOrigins,
   saveSettings,
@@ -10,7 +12,7 @@ import {
 import { h } from "../shared/h";
 import { createT, languageLabel, resolveUiLanguage, type Translate, type UiLanguage } from "../shared/i18n";
 import { LANGUAGES } from "../shared/languages";
-import { HOVER_COMMAND, MODE_COMMAND, TOGGLE_COMMAND, type BackgroundRequest, type TabState } from "../shared/messages";
+import { HOVER_COMMAND, MODE_COMMAND, TOGGLE_COMMAND, UNSUPPORTED_PAGE, type BackgroundRequest, type TabState } from "../shared/messages";
 import { ICONS, group, icon, segmented, selectInput, settingRow, showStatus, switchInput } from "../shared/ui";
 
 const app = document.getElementById("app")!;
@@ -64,7 +66,12 @@ function renderUnconfigured(): void {
   );
 }
 
+/** The settings the popup currently shows, to tell its own saves from those made elsewhere. */
+let shown = "";
+let activeTab: ActiveTab | undefined;
+
 async function render(initial: Settings, tab: ActiveTab): Promise<void> {
+  shown = JSON.stringify(initial);
   const ui = resolveUiLanguage(initial.uiLanguage, chrome.i18n.getUILanguage());
   applyLanguage(ui);
   if (initial.providers.length === 0) return renderUnconfigured();
@@ -75,11 +82,13 @@ async function render(initial: Settings, tab: ActiveTab): Promise<void> {
     tabId === undefined ? Promise.resolve<TabState>({ active: false }) : send<TabState>({ type: "tab-state", tabId }),
     shortcuts(),
   ]);
-  const status = h("div", { class: "status", role: "status" });
+  // Browser pages, the web store and the like cannot be translated; say so instead of offering a button that fails.
+  const supported = tabId !== undefined && tab.origin !== undefined;
+  const status = h("div", { class: "status", role: "status" }, supported ? "" : t("pageUnsupported"));
   const toggleKey = keys.get(TOGGLE_COMMAND);
   const toggle = h(
     "button",
-    { class: state.active ? "primary active" : "primary", id: "toggle", disabled: tabId === undefined },
+    { class: state.active ? "primary active" : "primary", id: "toggle", disabled: !supported },
     h("span", {}, state.active ? t("showOriginal") : t("translatePage")),
     toggleKey ? h("kbd", {}, toggleKey) : null,
   );
@@ -90,7 +99,7 @@ async function render(initial: Settings, tab: ActiveTab): Promise<void> {
       active: state.active,
       error: String(e),
     }));
-    if (res.error) showStatus(status, res.error, "error");
+    if (res.error) showStatus(status, res.error === UNSUPPORTED_PAGE ? t("pageUnsupported") : res.error, "error");
     return !res.error;
   };
 
@@ -102,6 +111,7 @@ async function render(initial: Settings, tab: ActiveTab): Promise<void> {
 
   const update = async (patch: Partial<Settings>, note = t("savedToggle")) => {
     settings = { ...settings, ...patch };
+    shown = JSON.stringify(normalizeSettings(settings));
     await saveSettings(settings);
     showStatus(status, state.active ? note : t("saved"));
   };
@@ -184,8 +194,17 @@ function siteToggle(
 
 async function main(): Promise<void> {
   const [settings, [tab]] = await Promise.all([loadSettings(), chrome.tabs.query({ active: true, currentWindow: true })]);
-  await render(settings, { id: tab?.id, origin: tab?.url ? siteOrigin(tab.url) : undefined });
+  activeTab = { id: tab?.id, origin: tab?.url ? siteOrigin(tab.url) : undefined };
+  await render(settings, activeTab);
 }
+
+// A save made elsewhere (the settings page) shows up here without reopening the popup.
+chrome.storage.onChanged.addListener((changes, area) => {
+  const change = area === "local" ? changes[STORAGE_KEY] : undefined;
+  if (!change || !activeTab) return;
+  const next = normalizeSettings(change.newValue);
+  if (JSON.stringify(next) !== shown) void render(next, activeTab).catch((e: unknown) => app.replaceChildren(h("p", { class: "status error" }, t("popupLoadFailed", { error: String(e) }))));
+});
 
 main().catch((e: unknown) => {
   app.replaceChildren(h("p", { class: "status error" }, t("popupLoadFailed", { error: String(e) })));

@@ -31,8 +31,8 @@ export function textInput(value: string, onInput: (v: string) => void, props: Re
   return h("input", { value, onInput: (e: Event) => onInput((e.target as HTMLInputElement).value), ...props });
 }
 
-export function numberInput(value: number, onInput: (v: number) => void, min: number, max: number): HTMLInputElement {
-  return textInput(String(value), (v) => onInput(Number(v)), { type: "number", min, max });
+export function numberInput(value: number, onInput: (v: number) => void, min: number, max: number, label: string): HTMLInputElement {
+  return textInput(String(value), (v) => onInput(Number(v)), { type: "number", min, max, "aria-label": label });
 }
 
 /**

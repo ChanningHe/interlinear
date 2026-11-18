@@ -7,7 +7,8 @@ import type { OptionsContext } from "./sections";
 import { openServiceDrawer, type DrawerHost } from "./service-drawer";
 
 // Translation services: a fixed-height list of the user's services, a type picker to add one,
-// and the setup drawer (service-drawer.ts) to configure it. Changes here are saved at once.
+// and the setup drawer (service-drawer.ts) to configure it. Changes here are saved at once. They
+// act on the list as shown, so services from an unsaved import are kept (and saved with them).
 
 const GROUPS: readonly [AdapterGroup, MessageKey][] = [
   ["subscription", "groupSubscription"],
@@ -31,10 +32,11 @@ function drawerHost(ctx: OptionsContext): DrawerHost {
   return {
     t: ctx.t,
     save(p: Provider, activate: boolean) {
-      ctx.persist((s) => {
-        const exists = s.providers.some((x) => x.id === p.id);
-        const providers = exists ? s.providers.map((x) => (x.id === p.id ? p : x)) : [...s.providers, p];
-        return { providers, activeProviderId: activate || !s.activeProviderId ? p.id : s.activeProviderId };
+      ctx.persist(() => {
+        const { providers: list, activeProviderId } = ctx.draft;
+        const exists = list.some((x) => x.id === p.id);
+        const providers = exists ? list.map((x) => (x.id === p.id ? p : x)) : [...list, p];
+        return { providers, activeProviderId: activate || !activeProviderId ? p.id : activeProviderId };
       });
     },
     tidy: () => ctx.tidy(),
@@ -51,12 +53,13 @@ function serviceRow(ctx: OptionsContext, p: Provider): HTMLElement {
   const { t } = ctx;
   const spec = adapterOf(p.adapter);
   const remove = () =>
-    ctx.persist((s) => {
-      const providers = s.providers.filter((x) => x.id !== p.id);
-      return { providers, activeProviderId: s.activeProviderId === p.id ? (providers[0]?.id ?? "") : s.activeProviderId };
+    ctx.persist(() => {
+      const providers = ctx.draft.providers.filter((x) => x.id !== p.id);
+      const { activeProviderId } = ctx.draft;
+      return { providers, activeProviderId: activeProviderId === p.id ? (providers[0]?.id ?? "") : activeProviderId };
     });
   const radio = h("input", { type: "radio", name: "active-service", id: `svc-${p.id}`, value: p.id, checked: p.id === ctx.draft.activeProviderId });
-  radio.addEventListener("change", () => ctx.persist((s) => ({ providers: s.providers, activeProviderId: p.id })));
+  radio.addEventListener("change", () => ctx.persist(() => ({ providers: ctx.draft.providers, activeProviderId: p.id })));
   return h(
     "div",
     { class: "svc provider" },

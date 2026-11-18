@@ -69,6 +69,13 @@ export const zhHant: Messages = {
   pageContextDesc: "有助於選詞。開啟後快取會依頁面區分。",
   glossary: "術語表",
   glossaryDesc: "每行一筆「術語 = 譯法」，最多 {max} 筆。只會送出請求中出現的術語。",
+  glossaryPlaceholder: "Kubernetes = Kubernetes\npull request = 拉取請求",
+  glossaryIgnored: "已忽略的行：{details}。",
+  glossaryIgnoredInvalid: "不是「術語 = 譯法」格式：{count}",
+  glossaryIgnoredTooLong: "超過 {max} 個字元：{count}",
+  glossaryIgnoredDuplicate: "術語重複：{count}",
+  glossaryIgnoredOverLimit: "超出 {max} 筆上限：{count}",
+  customPromptPlaceholder: "你是一名專業譯者。請把使用者的文字翻譯成{{to}}，讀起來要像母語人士寫的一樣自然。",
   customInstructions: "自訂指示",
   customInstructionsDesc: "取代預設的角色描述；{{to}} 代表目標語言。佔位符與分批規則一律會附加在後面。",
 
@@ -110,6 +117,7 @@ export const zhHant: Messages = {
   inputTranslationDesc: "在輸入框中連按三次空白鍵，翻譯你輸入的內容。",
   everywhere: "在所有網站啟用",
   hoverParagraphDesc: "滑鼠指向段落時快速連按兩次此鍵；第二次按住不放並移動滑鼠，可以翻譯經過的多個段落。也可以按快速鍵 {shortcut}。",
+  hoverParagraphDescNoShortcut: "滑鼠指向段落時快速連按兩次此鍵；第二次按住不放並移動滑鼠，可以翻譯經過的多個段落。",
   helpersNeedAccess: "以下功能需要在所有網站啟用後才能使用。",
   helpersAccessDesc: "需要存取所有網站的權限；仍然只在你使用這些功能時才傳送文字。",
   enabledEverywhere: "已在所有網站啟用",
@@ -155,6 +163,7 @@ export const zhHant: Messages = {
   importSettings: "匯入設定",
   importAction: "匯入…",
   imported: "已匯入。請檢查設定，然後點擊儲存。",
+  importInvalid: "這不是從 interlinear 匯出的設定檔。",
   importFailed: "匯入失敗：{error}",
 
   privacyTelemetry: "無遙測、無帳號、無遠端設定。",
@@ -172,6 +181,7 @@ export const zhHant: Messages = {
   alwaysTranslateNamed: "總是翻譯 {host}",
   siteDenied: "未取得此網站的存取權限。",
   unconfigured: "新增你自己的模型端點和 API 金鑰即可開始翻譯。",
+  pageUnsupported: "此頁面無法翻譯。",
   hintMode: "切換檢視",
   hintHover: "翻譯段落",
   popupLoadFailed: "載入失敗：{error}",
@@ -225,6 +235,9 @@ export const zhHant: Messages = {
   signingIn: "等待你完成登入…",
   signOut: "登出",
   manageUsage: "在 chatgpt.com 管理用量",
+  signInCancelled: "登入已取消。",
+  signInTimedOut: "登入逾時。",
+  signInNoTab: "無法開啟登入頁面。",
   signInFirst: "登入後可選擇模型。",
 
   // service types and their options

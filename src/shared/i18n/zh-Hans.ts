@@ -69,6 +69,13 @@ export const zhHans: Messages = {
   pageContextDesc: "有助于选词。开启后缓存按页面区分。",
   glossary: "术语表",
   glossaryDesc: "每行一条“术语 = 译法”，最多 {max} 条。只发送请求中出现的术语。",
+  glossaryPlaceholder: "Kubernetes = Kubernetes\npull request = 拉取请求",
+  glossaryIgnored: "已忽略的行：{details}。",
+  glossaryIgnoredInvalid: "不是“术语 = 译法”格式：{count}",
+  glossaryIgnoredTooLong: "超过 {max} 个字符：{count}",
+  glossaryIgnoredDuplicate: "术语重复：{count}",
+  glossaryIgnoredOverLimit: "超出 {max} 条上限：{count}",
+  customPromptPlaceholder: "你是一名专业译者。请把用户的文本翻译成{{to}}，读起来要像母语者写的一样自然。",
   customInstructions: "自定义指令",
   customInstructionsDesc: "替换默认的角色描述；{{to}} 代表目标语言。占位符与分批规则始终会附加在后面。",
 
@@ -110,6 +117,7 @@ export const zhHans: Messages = {
   inputTranslationDesc: "在输入框中连按三次空格，翻译你输入的内容。",
   everywhere: "在所有网站启用",
   hoverParagraphDesc: "鼠标指向段落时快速连按两次此键；第二次按住不放并移动鼠标，可以翻译经过的多个段落。也可以按快捷键 {shortcut}。",
+  hoverParagraphDescNoShortcut: "鼠标指向段落时快速连按两次此键；第二次按住不放并移动鼠标，可以翻译经过的多个段落。",
   helpersNeedAccess: "以下功能需要在所有网站启用后才能使用。",
   helpersAccessDesc: "需要访问所有网站的权限；仍然只在你使用这些功能时才发送文本。",
   enabledEverywhere: "已在所有网站启用",
@@ -155,6 +163,7 @@ export const zhHans: Messages = {
   importSettings: "导入设置",
   importAction: "导入…",
   imported: "已导入。请检查设置，然后点击保存。",
+  importInvalid: "这不是从 interlinear 导出的设置文件。",
   importFailed: "导入失败：{error}",
 
   privacyTelemetry: "无遥测、无账号、无远程配置。",
@@ -172,6 +181,7 @@ export const zhHans: Messages = {
   alwaysTranslateNamed: "总是翻译 {host}",
   siteDenied: "未获得此网站的访问权限。",
   unconfigured: "添加你自己的模型接口和 API Key 即可开始翻译。",
+  pageUnsupported: "此页面无法翻译。",
   hintMode: "切换视图",
   hintHover: "翻译段落",
   popupLoadFailed: "加载失败：{error}",
@@ -225,6 +235,9 @@ export const zhHans: Messages = {
   signingIn: "等待你完成登录…",
   signOut: "退出登录",
   manageUsage: "在 chatgpt.com 管理用量",
+  signInCancelled: "登录已取消。",
+  signInTimedOut: "登录超时。",
+  signInNoTab: "无法打开登录页面。",
   signInFirst: "登录后可选择模型。",
 
   // service types and their options

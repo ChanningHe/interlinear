@@ -20,6 +20,7 @@ import {
   MODE_COMMAND,
   TOGGLE_COMMAND,
   TRANSLATE_PORT,
+  UNSUPPORTED_PAGE,
   parseBackgroundRequest,
   type BackgroundRequest,
   type ContentRequest,
@@ -205,7 +206,8 @@ async function ensureInjected(tabId: number): Promise<void> {
     await chrome.scripting.insertCSS({ target: { tabId }, files: ["content.css"] });
     await chrome.scripting.executeScript({ target: { tabId }, files: ["content.js"] });
   } catch (e) {
-    throw new Error(`This page cannot be translated (${message(e)})`);
+    log("cannot inject:", e);
+    throw new Error(UNSUPPORTED_PAGE);
   }
 }
 
