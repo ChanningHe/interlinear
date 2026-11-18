@@ -150,9 +150,18 @@ export function isAd(el: Element): boolean {
   return marked && !el.matches(STRUCTURE_SELECTOR) && el.querySelector(HOLDS_CONTENT) === null;
 }
 
+/**
+ * A component whose open shadow root has no <slot> shows none of its light DOM: that text is a
+ * fallback (<relative-time> shows "53m ago" over "on Nov 18"), and its translation would say
+ * something the page does not. The component stays in place, untranslated.
+ */
+function rendersOwnText(el: Element): boolean {
+  return el.shadowRoot !== null && el.shadowRoot.querySelector("slot") === null;
+}
+
 /** Never translated, whatever the scope. */
 export function isNoise(el: Element, style: CSSStyleDeclaration): boolean {
-  return isScreenReaderOnly(el, style) || isPopup(el) || isAd(el);
+  return isScreenReaderOnly(el, style) || isPopup(el) || isAd(el) || rendersOwnText(el);
 }
 
 // ---- Page chrome: skipped when only the main content is translated ------------------------------

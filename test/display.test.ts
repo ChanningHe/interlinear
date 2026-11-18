@@ -115,3 +115,21 @@ describe("the page title outside the main landmark", () => {
     expect(contentRoots(document.body).map((r) => r.localName)).toEqual(["main"]);
   });
 });
+
+describe("web components that render their own text", () => {
+  function shadowed(html: string, shadow: string) {
+    document.body.innerHTML = html;
+    document.querySelectorAll("x-time").forEach((el) => {
+      el.attachShadow({ mode: "open" }).innerHTML = shadow;
+    });
+    return collectUnits(document.body).map((u) => plainText(u.text));
+  }
+
+  test("light-DOM fallback text that is never shown is not translated", () => {
+    expect(shadowed('<p>opened <x-time style="display: inline">on Nov 18, 2026</x-time> by someone</p>', '<span>53m ago</span>')).toEqual(["opened by someone"]);
+  });
+
+  test("text a component shows through a slot is translated", () => {
+    expect(shadowed('<p>opened <x-time style="display: inline">on Nov 18, 2026</x-time></p>', '<b><slot></slot></b>')).toEqual(["opened on Nov 18, 2026"]);
+  });
+});
