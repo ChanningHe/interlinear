@@ -2,10 +2,10 @@ import { originPattern, validateProvider, type Provider } from "../core/settings
 import { adapterOf, type OptionValue } from "../providers/adapters";
 import type { ModelInfo } from "../providers/models";
 import { h } from "../shared/h";
-import type { Translate } from "../shared/i18n";
+import type { MessageKey, Translate } from "../shared/i18n";
 import type { BackgroundRequest } from "../shared/messages";
 import { ICONS, field, icon, secretInput, segmented, showStatus, textInput } from "../shared/ui";
-import { SIGN_IN_ORIGINS, signInWithChatGPT } from "./chatgpt-signin";
+import { SIGN_IN_ORIGINS, SignInError, signInWithChatGPT } from "./chatgpt-signin";
 import { optionRows } from "./fields";
 
 // The setup drawer, shared by "add" and "edit": connect → model → options, then test and save.
@@ -60,6 +60,8 @@ export function openServiceDrawer(host: DrawerHost, initial: Provider, opts: { r
   const status = h("span", { class: "status", role: "status" });
   const patch = (next: Partial<Provider>) => {
     p = { ...p, ...next };
+    // A validation message is about the previous values; the next Save or Test checks again.
+    if (status.classList.contains("error")) showStatus(status, "");
   };
 
   // ---- header: the service's own name, editable in place --------------------------------------
@@ -79,8 +81,10 @@ export function openServiceDrawer(host: DrawerHost, initial: Provider, opts: { r
   async function loadModels(): Promise<void> {
     connectError = "";
     const res = await send<{ ok: boolean; models?: ModelInfo[]; error?: string }>({ type: "list-models", provider: p });
-    if (res.ok) models = res.models ?? [];
-    else connectError = res.error ?? t("unknownError");
+    if (res.ok) {
+      models = res.models ?? [];
+      showStatus(status, "");
+    } else connectError = res.error ?? t("unknownError");
     render();
   }
 
@@ -118,7 +122,7 @@ export function openServiceDrawer(host: DrawerHost, initial: Provider, opts: { r
       await loadModels();
     })().catch((e: unknown) => {
       if (signInAbort.signal.aborted) return;
-      connectError = e instanceof Error ? e.message : String(e);
+      connectError = e instanceof SignInError ? t(e.key) : e instanceof Error ? e.message : String(e);
       render();
     });
   }
@@ -166,8 +170,9 @@ export function openServiceDrawer(host: DrawerHost, initial: Provider, opts: { r
       );
     }
     const connected = models !== undefined;
+    const genericEndpoint = spec.id === "custom-anthropic" ? "https://…/v1/messages" : "https://…/v1/chat/completions";
     const endpoint = spec.editableEndpoint
-      ? field(t("fieldEndpoint"), textInput(p.endpoint, (v) => patch({ endpoint: v.trim() }), { type: "url", spellcheck: false, placeholder: spec.endpoint || "https://…/v1/chat/completions", onChange: resetConnection }))
+      ? field(t("fieldEndpoint"), textInput(p.endpoint, (v) => patch({ endpoint: v.trim() }), { type: "url", spellcheck: false, placeholder: spec.endpoint || genericEndpoint, onChange: resetConnection }))
       : null;
     const key =
       spec.auth === "none"
@@ -213,12 +218,20 @@ export function openServiceDrawer(host: DrawerHost, initial: Provider, opts: { r
     return [];
   }
 
+  /** Column titles over the OpenRouter list, whose rows carry context, price and reasoning. */
+  function columnHeads(): HTMLElement | null {
+    if (spec.models !== "openrouter") return null;
+    const cell = (key: MessageKey) => h("span", { class: "num" }, t(key));
+    return h("div", { class: "model-row model-head", "aria-hidden": "true" }, h("span"), h("span", {}, t("colModel")), cell("colContext"), cell("colPrice"), cell("colReasoning"));
+  }
+
   function modelRows(list: HTMLElement): void {
     const q = query.toLowerCase();
     const rows = (models ?? []).filter(
       (m) => (!freeOnly || m.priceIn === 0) && (!q || m.id.toLowerCase().includes(q) || (m.name ?? "").toLowerCase().includes(q)),
     );
     list.replaceChildren(
+      ...[columnHeads()].filter((n): n is HTMLElement => n !== null),
       ...rows.slice(0, MAX_ROWS).map((m) => {
         const extra = columns(m);
         const radio = h("input", { type: "radio", name: "model", checked: m.id === p.model, "aria-label": m.id });
@@ -241,11 +254,11 @@ export function openServiceDrawer(host: DrawerHost, initial: Provider, opts: { r
     const aside = models && models.length > 0 ? h("span", { class: "muted" }, t("modelsCount", { count: models.length })) : null;
     const head = stepHead(2, t("stepModel"), p.model !== "", aside);
     if (!models || models.length === 0) {
-      const manual = field(t("modelId"), textInput(p.model, (v) => patch({ model: v.trim() }), { spellcheck: false, placeholder: "model id" }));
+      const manual = field(t("modelId"), textInput(p.model, (v) => patch({ model: v.trim() }), { spellcheck: false, placeholder: t("modelPlaceholder") }));
       const hint = models ? t("modelsUnavailable") : spec.auth === "oauth" ? t("signInFirst") : t("connectFirst");
       return h("section", { class: "step" }, head, manual, h("span", { class: "hint" }, hint));
     }
-    const list = h("div", { class: "models", role: "radiogroup", "aria-label": t("stepModel") });
+    const list = h("div", { class: spec.models === "openrouter" ? "models columns" : "models", role: "radiogroup", "aria-label": t("stepModel") });
     const search = h("input", { type: "search", value: query, placeholder: t("searchModels"), "aria-label": t("searchModels") });
     search.addEventListener("input", () => {
       query = search.value;

@@ -593,6 +593,9 @@ label.search > input[type="search"] { padding-left: 34px; }
 }
 .model-row + .model-row { border-top: 1px solid var(--border); }
 .model-row:hover { background: var(--surface-2); }
+.models.columns .model-row { grid-template-columns: 18px minmax(0, 1fr) 52px 92px 104px; } /* aligned under the column titles */
+.model-head { position: sticky; top: 0; z-index: 1; background: var(--surface); cursor: default; font-size: 11.5px; font-weight: 600; color: var(--muted); }
+.model-head:hover { background: var(--surface); }
 .model-row.selected { background: var(--accent-soft); }
 .model-row input { margin: 0; }
 .model-row .id { font: 12.5px ui-monospace, SFMono-Regular, Menlo, monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

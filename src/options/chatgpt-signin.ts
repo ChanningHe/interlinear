@@ -19,6 +19,13 @@ export const SIGN_IN_ORIGINS: readonly string[] = ["https://auth.openai.com/*", 
 
 const SIGN_IN_TIMEOUT_MS = 10 * 60_000;
 
+/** A sign-in that did not finish; `key` is the message for the user (the drawer translates it). */
+export class SignInError extends Error {
+  constructor(readonly key: "signInCancelled" | "signInTimedOut" | "signInNoTab") {
+    super(key);
+  }
+}
+
 /** Resolves with the callback URL the tab is sent to; rejects if the tab is closed or time runs out. */
 function waitForCallback(tabId: number, signal: AbortSignal): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -33,12 +40,12 @@ function waitForCallback(tabId: number, signal: AbortSignal): Promise<string> {
       const url = id === tabId ? callbackFrom(change.url ?? tab.url ?? "") : undefined;
       if (url) finish(() => resolve(url));
     };
-    const onAbort = () => finish(() => reject(new Error("Sign-in was cancelled")));
+    const onAbort = () => finish(() => reject(new SignInError("signInCancelled")));
     signal.addEventListener("abort", onAbort);
     const onRemoved = (id: number) => {
-      if (id === tabId) finish(() => reject(new Error("Sign-in was cancelled")));
+      if (id === tabId) finish(() => reject(new SignInError("signInCancelled")));
     };
-    const timer = setTimeout(() => finish(() => reject(new Error("Sign-in timed out"))), SIGN_IN_TIMEOUT_MS);
+    const timer = setTimeout(() => finish(() => reject(new SignInError("signInTimedOut"))), SIGN_IN_TIMEOUT_MS);
     chrome.tabs.onUpdated.addListener(onUpdated);
     chrome.tabs.onRemoved.addListener(onRemoved);
   });
@@ -53,13 +60,13 @@ export async function signInWithChatGPT(providerId: string, signal: AbortSignal)
   const pending = newPendingSignIn(existing?.clientId);
   const url = await authorizeUrl(pending, await hostId(), existing?.email || undefined);
   const tab = await chrome.tabs.create({ url });
-  if (tab.id === undefined) throw new Error("Could not open the sign-in page");
+  if (tab.id === undefined) throw new SignInError("signInNoTab");
   const callback = await waitForCallback(tab.id, signal).finally(() => {
     chrome.tabs.remove(tab.id!).catch(() => {}); // the user may already have closed it
   });
   const { code, clientId } = parseCallback(callback, pending);
   const cred = await exchangeCode(code, clientId, pending);
-  if (signal.aborted) throw new Error("Sign-in was cancelled");
+  if (signal.aborted) throw new SignInError("signInCancelled");
   await saveCredential(providerId, cred);
   return cred;
 }

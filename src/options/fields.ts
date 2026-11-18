@@ -30,10 +30,10 @@ function recommendation(t: Translate, field: OptionField): string | null {
 }
 
 /** Tag input for lists such as preferred providers: Enter or comma adds, × removes. */
-function chips(t: Translate, values: readonly string[], placeholder: string, onChange: (v: string[]) => void): HTMLElement {
+function chips(t: Translate, values: readonly string[], placeholder: string, label: string, onChange: (v: string[]) => void): HTMLElement {
   let current = [...values];
   const box = h("span", { class: "chips" });
-  const input = h("input", { type: "text", class: "chip-input", placeholder, "aria-label": placeholder });
+  const input = h("input", { type: "text", class: "chip-input", placeholder, "aria-label": label });
   const draw = () => {
     box.replaceChildren(
       ...current.map((v) =>
@@ -71,7 +71,7 @@ function control(t: Translate, field: OptionField, value: OptionValue | undefine
   const label = t(field.label);
   if (field.kind === "switch") return switchInput(value === true, onChange, label);
   if (field.kind === "list") {
-    return chips(t, Array.isArray(value) ? value : [], field.placeholder ? t(field.placeholder) : "", onChange);
+    return chips(t, Array.isArray(value) ? value : [], field.placeholder ? t(field.placeholder) : "", label, onChange);
   }
   const choices = choicesFor(field, model).map((c) => ({ value: c.value, label: t(c.label) }));
   if (choices.length === 0) return null;
