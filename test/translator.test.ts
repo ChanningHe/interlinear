@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { createLanguageFilter, inputLanguage, normalizeLang } from "../src/content/lang";
-import { createPageTranslator, type Visibility } from "../src/content/translator";
+import { createPageTranslator, type PageTranslateOptions, type Visibility } from "../src/content/translator";
 import { contentLabels } from "../src/shared/i18n";
 import type { PageConfig, TranslateResult } from "../src/shared/messages";
 
@@ -66,6 +66,15 @@ describe("page translator", () => {
     expect(translations()).toEqual(["FIRST PARAGRAPH", "SECOND LINK HERE"]);
     expect(upper).toHaveBeenCalledTimes(1);
     expect(document.querySelector("p:nth-of-type(2) bt-tr a")?.getAttribute("href")).toBe("/x");
+  });
+
+  test("asks for the language the page started with, so a settings change cannot mix languages", async () => {
+    const translate = vi.fn((texts: readonly string[], _opts: PageTranslateOptions) => upper(texts));
+    const t = setup("<p>Some paragraph</p>", { config: { ...config, targetLang: "ja" }, translate });
+    t.start();
+    await vi.waitFor(() => expect(translations()).toHaveLength(1));
+    expect(translate.mock.calls[0]![1]).toMatchObject({ targetLang: "ja" });
+    expect(document.querySelector("bt-tr")!.getAttribute("lang")).toBe("ja");
   });
 
   test("stop restores the original DOM exactly", async () => {

@@ -34,6 +34,8 @@ export interface Visibility {
 
 export interface PageTranslateOptions {
   readonly priority: TranslatePriority;
+  /** The language this page is translated into; fixed when translation starts, like its boxes' lang. */
+  readonly targetLang: string;
   /** Aborted when translation is turned off. */
   readonly signal: AbortSignal;
   /** Results that arrive before the whole batch is done. */
@@ -495,7 +497,7 @@ export function createPageTranslator(deps: PageTranslatorDeps) {
     try {
       const results = await deps.translate(
         batch.map((u) => u.text),
-        { priority, signal, onResult: showOnce },
+        { priority, targetLang: deps.config.targetLang, signal, onResult: showOnce },
       );
       batch.forEach((_, i) => showOnce(i, results[i] ?? { ok: false, error: labels.errNoResult }));
     } catch (e) {

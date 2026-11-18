@@ -95,7 +95,7 @@ function streamTexts(texts: readonly string[], opts: PageTranslateOptions): Prom
       finish(() => reject(new Error(failureText(ownFailure("errExtension", "No response from the extension background"))))),
     );
     const context = config?.pageContext ? document.title : undefined;
-    port.postMessage({ type: "translate", texts, context, priority: opts.priority } satisfies TranslateRequest);
+    port.postMessage({ type: "translate", texts, context, priority: opts.priority, targetLang: opts.targetLang } satisfies TranslateRequest);
   });
 }
 
