@@ -202,6 +202,15 @@ describe("retry policy", () => {
     expect(fetchFn).toHaveBeenCalledTimes(2);
   });
 
+  test("errors say what kind of failure they are", async () => {
+    mockFetch(new TypeError("Failed to fetch"), new TypeError("Failed to fetch"), new TypeError("Failed to fetch"));
+    expect(await complete(openai, req, noSleep).catch((e: unknown) => e)).toMatchObject({ code: "errNetwork" });
+    mockFetch(sse([{ choices: [{ delta: { content: "x" }, finish_reason: "content_filter" }] }, "data: [DONE]"]));
+    expect(await complete(openai, req, noSleep).catch((e: unknown) => e)).toMatchObject({ code: "errRefused" });
+    mockFetch(sse([{ choices: [{ delta: { content: "x" }, finish_reason: "length" }] }, "data: [DONE]"]));
+    expect(await complete(openai, req, noSleep).catch((e: unknown) => e)).toMatchObject({ code: "errTruncated" });
+  });
+
   test("does not retry 401 and reports API error message", async () => {
     const fetchFn = mockFetch(json({ error: { message: "Invalid key" } }, 401));
     const err = await complete(openai, req, noSleep).catch((e: unknown) => e);

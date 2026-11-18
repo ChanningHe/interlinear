@@ -1,4 +1,5 @@
 import { chineseScript } from "../languages";
+import type { TranslateResult } from "../messages";
 import { en, type MessageKey, type Messages } from "./en";
 import { ja } from "./ja";
 import { zhHans } from "./zh-Hans";
@@ -43,8 +44,36 @@ export function createT(lang: UiLanguage): Translate {
   return (key, vars) => format(dict[key], vars);
 }
 
+/**
+ * Why a translation failed, as the key of its text: results carry the code and pages show it in
+ * the interface language. Server-provided text never reaches a page.
+ */
+export const ERROR_CODES = [
+  "errNoService",
+  "errRejected",
+  "errRateLimited",
+  "errService",
+  "errNoAccess",
+  "errSignedOut",
+  "errSignInFailed",
+  "errPlanLimit",
+  "errPlanNotEligible",
+  "errNetwork",
+  "errEmpty",
+  "errRefused",
+  "errTruncated",
+  "errBadResponse",
+  "errStream",
+  "errFailed",
+  "errNoResult",
+  "errExtension",
+] as const satisfies readonly MessageKey[];
+
+export type ErrorCode = (typeof ERROR_CODES)[number];
+
 /** Strings shown inside web pages; only these are sent to content scripts. */
 export const CONTENT_KEYS = [
+  ...ERROR_CODES,
   "translating",
   "copy",
   "copied",
@@ -71,3 +100,10 @@ export function languageLabel(code: string, ui: UiLanguage, fallback: string): s
     return fallback;
   }
 }
+
+/** A failure's text in the interface language; results without a code keep their own text. */
+export function localizeFailure(r: TranslateResult, labels: ContentLabels): TranslateResult {
+  if (r.ok || !r.code) return r;
+  return { ok: false, error: format(labels[r.code], r.status === undefined ? {} : { status: r.status }) };
+}
+

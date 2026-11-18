@@ -1,9 +1,12 @@
 import { MAX_CONTEXT_LENGTH } from "../core/prompt";
 import type { DisplayMode, DisplayStyle, HoverModifier, Provider, TranslationScope } from "../core/settings";
-import type { ContentLabels } from "./i18n";
+import { ERROR_CODES, type ContentLabels, type ErrorCode } from "./i18n";
 import { isKnownLanguage } from "./languages";
 
-export type TranslateResult = { readonly ok: true; readonly text: string } | { readonly ok: false; readonly error: string };
+export type TranslateResult =
+  | { readonly ok: true; readonly text: string }
+  /** `error` is English (logs, and the fallback); pages show `code` in the interface language. */
+  | { readonly ok: false; readonly error: string; readonly code?: ErrorCode; readonly status?: number };
 
 /** The only settings a content script ever sees. API keys never leave the background. */
 export interface PageConfig {
@@ -51,7 +54,7 @@ export const TRANSLATE_PORT = "translate";
 export type TranslateStreamMessage =
   | { readonly type: "result"; readonly index: number; readonly result: TranslateResult }
   | { readonly type: "done" }
-  | { readonly type: "error"; readonly error: string };
+  | { readonly type: "error"; readonly error: string; readonly code?: ErrorCode; readonly status?: number };
 
 // Content script / extension pages -> background
 export type BackgroundRequest =
@@ -94,7 +97,10 @@ export const isDisplayMode = (v: unknown): v is DisplayMode => v === "bilingual"
 
 export function isTranslateResult(v: unknown): v is TranslateResult {
   if (!isObject(v)) return false;
-  return v.ok === true ? typeof v.text === "string" : v.ok === false && typeof v.error === "string";
+  if (v.ok === true) return typeof v.text === "string";
+  const codeOk = v.code === undefined || (ERROR_CODES as readonly unknown[]).includes(v.code);
+  const statusOk = v.status === undefined || Number.isInteger(v.status);
+  return v.ok === false && typeof v.error === "string" && codeOk && statusOk;
 }
 
 function parseTranslate(raw: Record<string, unknown>): TranslateRequest | undefined {

@@ -1,5 +1,5 @@
 import { describe, expect, test, vi } from "vitest";
-import { createTranslator, publicError, type Cache } from "../src/background/translate";
+import { createTranslator, publicError, publicFailure, type Cache } from "../src/background/translate";
 import { ProviderError } from "../src/core/providers";
 import { DEFAULT_SETTINGS, type Settings } from "../src/core/settings";
 
@@ -36,7 +36,7 @@ describe("translator", () => {
     const t = createTranslator({ getSettings: async () => DEFAULT_SETTINGS, cache: memoryCache(), complete: fakeModel() });
     const seen: unknown[] = [];
     const res = await t.translate(["a"], { onResult: (_, r) => seen.push(r) });
-    expect(res).toEqual([{ ok: false, error: expect.stringContaining("No translation service") }]);
+    expect(res).toEqual([{ ok: false, error: expect.stringContaining("No translation service"), code: "errNoService" }]);
     expect(seen).toEqual(res); // streamed to pages too
   });
 
@@ -65,12 +65,12 @@ describe("translator", () => {
   });
 
   test("provider errors fail the batch without fan-out retries", async () => {
-    const complete = vi.fn().mockRejectedValue(new ProviderError("HTTP 401: bad key", false, 401));
+    const complete = vi.fn().mockRejectedValue(new ProviderError("HTTP 401: bad key", false, { status: 401 }));
     const t = createTranslator({ getSettings: async () => settings, cache: memoryCache(), complete });
     const res = await t.translate(["a", "b"]);
     expect(res).toEqual([
-      { ok: false, error: expect.stringContaining("HTTP 401") },
-      { ok: false, error: expect.stringContaining("HTTP 401") },
+      { ok: false, error: expect.stringContaining("HTTP 401"), code: "errRejected", status: 401 },
+      { ok: false, error: expect.stringContaining("HTTP 401"), code: "errRejected", status: 401 },
     ]);
     expect(complete).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(res)).not.toContain("bad key");
@@ -103,10 +103,27 @@ describe("translator", () => {
   });
 
   test("public errors never echo server-provided text", () => {
-    expect(publicError(new ProviderError("HTTP 500: internal gw.corp.local", true, 500))).toBe("The service returned an error (HTTP 500).");
-    expect(publicError(new ProviderError("HTTP 429: slow down", true, 429))).toContain("Rate limited");
+    expect(publicError(new ProviderError("HTTP 500: internal gw.corp.local", true, { status: 500 }))).toBe("The service returned an error (HTTP 500).");
+    expect(publicError(new ProviderError("HTTP 429: slow down", true, { status: 429 }))).toContain("Rate limited");
     expect(publicError(new ProviderError("Model refused to translate this content", false))).toBe("Model refused to translate this content");
     expect(publicError(new Error("secret"))).toBe("Translation failed");
+  });
+
+  test("failures carry a code the page puts into its own language", () => {
+    expect(publicFailure(new ProviderError("HTTP 401: Invalid key", false, { status: 401 }))).toEqual({
+      error: "The service rejected the request (HTTP 401). Check the API key in settings.",
+      code: "errRejected",
+      status: 401,
+    });
+    expect(publicFailure(new ProviderError("HTTP 429: slow down", true, { status: 429 }))).toMatchObject({ code: "errRateLimited" });
+    expect(publicFailure(new ProviderError("HTTP 502: gw", true, { status: 502 }))).toMatchObject({ code: "errService", status: 502 });
+    expect(publicFailure(new ProviderError("Network error: Failed to fetch", true, { code: "errNetwork" }))).toMatchObject({ code: "errNetwork" });
+    expect(publicFailure(new Error("secret"))).toEqual({ error: "Translation failed", code: "errFailed" });
+  });
+
+  test("a missing service is reported with its code", async () => {
+    const t = createTranslator({ getSettings: async () => DEFAULT_SETTINGS, cache: memoryCache(), complete: fakeModel() });
+    expect((await t.translate(["a"]))[0]).toMatchObject({ ok: false, code: "errNoService" });
   });
 
   test("cache keys depend on target language and model", async () => {

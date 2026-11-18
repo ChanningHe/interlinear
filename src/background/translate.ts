@@ -5,6 +5,7 @@ import { activeProvider, type Provider, type Settings } from "../core/settings";
 import { adapterOf, outputOptions } from "../providers/adapters";
 import { languageName } from "../shared/languages";
 import type { TranslateResult } from "../shared/messages";
+import type { ErrorCode } from "../shared/i18n";
 
 export interface Cache {
   get(keys: readonly string[]): Promise<(string | undefined)[]>;
@@ -39,22 +40,35 @@ export interface TranslatorDeps {
   readonly complete: (p: Provider, req: ChatRequest, opts?: CompleteRequestOptions) => Promise<string>;
 }
 
-const NO_PROVIDER = "No translation service configured. Open the extension settings to add one.";
+/** Why a translation failed: English text (logs, fallback) and the code pages localize. */
+export interface Failure {
+  readonly error: string;
+  readonly code: ErrorCode;
+  readonly status?: number;
+}
+
+const NO_PROVIDER: Failure = { error: "No translation service configured. Open the extension settings to add one.", code: "errNoService" };
+const EMPTY: Failure = { error: "Model returned an empty translation", code: "errEmpty" };
 
 const ok = (text: string): TranslateResult => ({ ok: true, text });
-const fail = (error: string): TranslateResult => ({ ok: false, error });
+const fail = (f: Failure): TranslateResult => ({ ok: false, ...f });
 
 /**
  * Results end up inside the web page's DOM, so provider error bodies (which can echo key
  * fragments or internal hostnames) are replaced by status-based text. Details go to the log.
  */
-export function publicError(e: unknown): string {
-  if (!(e instanceof ProviderError)) return "Translation failed";
-  if (e.status === 401 || e.status === 403) return `The service rejected the request (HTTP ${e.status}). Check the API key in settings.`;
-  if (e.status === 429) return "Rate limited by the service (HTTP 429). Try again later.";
-  if (e.status !== undefined) return `The service returned an error (HTTP ${e.status}).`;
-  return e.message; // our own messages, which never include server-provided text
+export function publicFailure(e: unknown): Failure {
+  if (!(e instanceof ProviderError)) return { error: "Translation failed", code: "errFailed" };
+  const { status } = e;
+  if (status === 401 || status === 403) {
+    return { error: `The service rejected the request (HTTP ${status}). Check the API key in settings.`, code: "errRejected", status };
+  }
+  if (status === 429) return { error: "Rate limited by the service (HTTP 429). Try again later.", code: "errRateLimited" };
+  if (status !== undefined) return { error: `The service returned an error (HTTP ${status}).`, code: "errService", status };
+  return { error: e.message, code: e.code ?? "errFailed" }; // our own messages, never server text
 }
+
+export const publicError = (e: unknown): string => publicFailure(e).error;
 
 const RANK: Readonly<Record<Priority, number>> = { visible: 0, prefetch: 1 };
 
@@ -173,10 +187,10 @@ export function createTranslator(deps: TranslatorDeps) {
       } catch (e) {
         if (!opts.signal?.aborted) console.warn("[interlinear] request failed:", e);
         // A failed request fails what is left of the batch; retrying item by item would multiply cost.
-        items.forEach((_, j) => settle(j, fail(publicError(e))));
+        items.forEach((_, j) => settle(j, fail(publicFailure(e))));
         return;
       }
-      if (items.length === 1) return settle(0, parsed[0] === undefined ? fail("Model returned an empty translation") : ok(parsed[0]));
+      if (items.length === 1) return settle(0, parsed[0] === undefined ? fail(EMPTY) : ok(parsed[0]));
       accept(parsed);
       // Segments the model dropped, garbled or stripped of links/code get one more chance alone,
       // ahead of other waiting text of the same priority.

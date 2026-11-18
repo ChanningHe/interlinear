@@ -61,11 +61,35 @@ bt-tr[data-bt].bt-loading::after {
   }
 }
 
+/* Its own small line, whatever paragraph it belongs to (a heading would make it huge and bold). */
+bt-tr[data-bt].bt-error {
+  display: block;
+  margin: 0.25em 0 0;
+  color: var(--bt-error);
+  font-size: 0.8125rem;
+  font-weight: 400;
+  line-height: 1.4;
+}
+
+bt-tr[data-bt].bt-error .bt-error-reason::before {
+  content: "⚠ ";
+}
+
+bt-tr[data-bt].bt-error.bt-paused {
+  color: inherit;
+  opacity: 0.75;
+}
+
+bt-tr[data-bt].bt-error.bt-paused .bt-error-reason::before {
+  content: "⏸ ";
+}
+
 bt-tr[data-bt].bt-error button {
   all: unset;
   cursor: pointer;
-  color: var(--bt-error);
-  font-size: 0.85em;
+  margin-inline-start: 0.6em;
+  font-weight: 600;
+  text-decoration: underline;
 }
 
 bt-tr[data-bt].bt-error button:focus-visible {

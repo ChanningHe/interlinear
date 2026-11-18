@@ -11,6 +11,7 @@ import {
   type TranslateResult,
   type TranslateStreamMessage,
 } from "../shared/messages";
+import { localizeFailure, type ErrorCode } from "../shared/i18n";
 import { installHover, trackPointer, type HoverHandle } from "./hover";
 import { installTripleSpace, translateField, type Field } from "./input";
 import { chromeDetector, createLanguageFilter, inputLanguage } from "./lang";
@@ -44,11 +45,18 @@ function send<T>(msg: BackgroundRequest): Promise<T> {
 
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
+/** Failures arrive as codes with English text; the page shows them in the interface language. */
+const localize = (r: TranslateResult): TranslateResult => (config ? localizeFailure(r, config.labels) : r);
+
+/** A failure the page itself runs into, in the interface language. */
+const ownFailure = (code: ErrorCode, english: string): TranslateResult => localize({ ok: false, error: english, code });
+const failureText = (r: TranslateResult) => (r.ok ? "" : r.error);
+
 async function translateTexts(texts: readonly string[], targetLang?: string): Promise<TranslateResult[]> {
   const context = config?.pageContext ? document.title : undefined;
   const res = await send<TranslateResult[] | { error?: string }>({ type: "translate", texts, targetLang, context });
-  if (!Array.isArray(res)) throw new Error(res?.error ?? "No response from the extension background");
-  return res;
+  if (!Array.isArray(res)) throw new Error(res?.error ?? failureText(ownFailure("errExtension", "No response from the extension background")));
+  return res.map(localize);
 }
 
 /** Page translation: results arrive one by one over a port; aborting disconnects it, which cancels the rest. */
@@ -71,15 +79,19 @@ function streamTexts(texts: readonly string[], opts: PageTranslateOptions): Prom
       if (msg?.type === "result") {
         const { index, result } = msg;
         if (!Number.isInteger(index) || index < 0 || index >= texts.length || !isTranslateResult(result)) return;
-        results[index] = result;
-        opts.onResult(index, result);
+        const shown = localize(result);
+        results[index] = shown;
+        opts.onResult(index, shown);
       } else if (msg?.type === "done") {
-        finish(() => resolve(results.map((r) => r ?? { ok: false, error: "No result returned" })));
+        finish(() => resolve(results.map((r) => r ?? ownFailure("errNoResult", "No result returned"))));
       } else if (msg?.type === "error") {
-        finish(() => reject(new Error(String(msg.error))));
+        const failure = { ok: false as const, error: String(msg.error), code: msg.code, status: msg.status };
+        finish(() => reject(new Error(failureText(isTranslateResult(failure) ? localize(failure) : failure))));
       }
     });
-    port.onDisconnect.addListener(() => finish(() => reject(new Error("No response from the extension background"))));
+    port.onDisconnect.addListener(() =>
+      finish(() => reject(new Error(failureText(ownFailure("errExtension", "No response from the extension background"))))),
+    );
     const context = config?.pageContext ? document.title : undefined;
     port.postMessage({ type: "translate", texts, context, priority: opts.priority } satisfies TranslateRequest);
   });
@@ -87,7 +99,7 @@ function streamTexts(texts: readonly string[], opts: PageTranslateOptions): Prom
 
 async function translateOne(text: string, targetLang?: string): Promise<TranslateResult> {
   try {
-    return (await translateTexts([text], targetLang))[0] ?? { ok: false, error: "No result returned" };
+    return (await translateTexts([text], targetLang))[0] ?? ownFailure("errNoResult", "No result returned");
   } catch (e) {
     return { ok: false, error: errorText(e) };
   }

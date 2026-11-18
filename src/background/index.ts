@@ -38,7 +38,7 @@ import {
 } from "../providers/chatgpt-auth";
 import { listModels } from "../providers/models";
 import { createIdbCache } from "./cache";
-import { createTranslator, publicError, type CompleteRequestOptions } from "./translate";
+import { createTranslator, publicError, publicFailure, type CompleteRequestOptions } from "./translate";
 
 const log = (...args: unknown[]) => console.warn("[interlinear]", ...args);
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
@@ -133,7 +133,7 @@ const refreshing = new Map<string, Promise<string>>();
 
 async function freshToken(providerId: string): Promise<string> {
   const cred = await loadCredential(providerId);
-  if (!cred) throw new ProviderError("Not signed in; sign in again in settings", false);
+  if (!cred) throw new ProviderError("Not signed in; sign in again in settings", false, { code: "errSignedOut" });
   if (!needsRefresh(cred)) return cred.accessToken;
   let next;
   try {
@@ -142,13 +142,13 @@ async function freshToken(providerId: string): Promise<string> {
     if (e instanceof SignedOutError) {
       // Only if nobody signed in again meanwhile.
       if ((await loadCredential(providerId))?.refreshToken === cred.refreshToken) await deleteCredential(providerId);
-      throw new ProviderError(e.message, false);
+      throw new ProviderError(e.message, false, { code: "errSignedOut" });
     }
     // fetch rejects with TypeError on network failure; anything else will not fix itself.
-    throw new ProviderError(`Token refresh failed: ${message(e)}`, e instanceof TypeError);
+    throw new ProviderError(`Token refresh failed: ${message(e)}`, e instanceof TypeError, { code: "errSignInFailed" });
   }
   // A sign-out or a new sign-in during the refresh wins: never resurrect or overwrite it.
-  if ((await loadCredential(providerId))?.refreshToken !== cred.refreshToken) throw new ProviderError("Signed out of ChatGPT; sign in again in settings", false);
+  if ((await loadCredential(providerId))?.refreshToken !== cred.refreshToken) throw new ProviderError("Signed out of ChatGPT; sign in again in settings", false, { code: "errSignedOut" });
   await saveCredential(providerId, next);
   return next.accessToken;
 }
@@ -167,7 +167,7 @@ async function assertAccess(p: Provider): Promise<void> {
   if (!(await chrome.permissions.contains({ origins }))) {
     log("host access missing for", new URL(p.endpoint).origin);
     // No hostname in the message: it may be shown inside the translated page.
-    throw new ProviderError("Access to the API endpoint is not granted. Open settings and click Save.", false);
+    throw new ProviderError("Access to the service's address is not granted. Open the service in settings and save it again.", false, { code: "errNoAccess" });
   }
 }
 
@@ -389,7 +389,7 @@ chrome.runtime.onConnect.addListener((port) => {
         },
         (e: unknown) => {
           log("translate failed:", e);
-          post({ type: "error", error: publicError(e) });
+          post({ type: "error", ...publicFailure(e) });
         },
       );
   });

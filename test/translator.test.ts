@@ -121,7 +121,11 @@ describe("page translator", () => {
       expect(b).not.toBeNull();
       return b!;
     });
-    expect(button.closest("bt-tr")!.getAttribute("title")).toBe("HTTP 500");
+    const box = button.closest("bt-tr")!;
+    expect(box.getAttribute("title")).toBe("HTTP 500");
+    // The reason is on the page, not only in a tooltip, and stays text (never markup).
+    expect(box.querySelector(".bt-error-reason")?.textContent).toBe("HTTP 500");
+    expect(box.textContent).toBe(`HTTP 500${button.textContent}`);
     button.click();
     await vi.waitFor(() => expect(translations()).toEqual(["成功"]));
   });
@@ -131,7 +135,8 @@ describe("page translator", () => {
     t.start();
     await vi.waitFor(() => expect(translations()).toEqual(["FIRST PARAGRAPH TEXT"]));
     const paused = document.querySelector<HTMLButtonElement>("bt-tr.bt-error button")!;
-    expect(paused.textContent).toContain("paused");
+    expect(paused.textContent).toBe("Continue");
+    expect(paused.closest("bt-tr")!.classList.contains("bt-paused")).toBe(true); // shown as a pause, not an error
     paused.click();
     await vi.waitFor(() => expect(translations()).toHaveLength(2));
   });

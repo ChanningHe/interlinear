@@ -323,6 +323,7 @@ export function createPageTranslator(deps: PageTranslatorDeps) {
     message: labels.pausedMessage,
     label: labels.paused,
     requireTrustedClick,
+    paused: true,
   };
 
   /** One confirmation resumes every paused paragraph. */
@@ -451,7 +452,7 @@ export function createPageTranslator(deps: PageTranslatorDeps) {
         batch.map((u) => u.text),
         { priority, signal, onResult: showOnce },
       );
-      batch.forEach((_, i) => showOnce(i, results[i] ?? { ok: false, error: "No result returned" }));
+      batch.forEach((_, i) => showOnce(i, results[i] ?? { ok: false, error: labels.errNoResult }));
     } catch (e) {
       if (signal.aborted) return; // turned off: the wrappers are gone already
       batch.forEach((_, i) => showOnce(i, { ok: false, error: message(e) }));

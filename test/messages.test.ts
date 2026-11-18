@@ -64,6 +64,9 @@ describe("isTranslateResult", () => {
     [{ ok: true, text: "x" }, true],
     [{ ok: false, error: "e" }, true],
     [{ ok: true }, false],
+    [{ ok: false, error: "e", code: "errRejected", status: 401 }, true],
+    [{ ok: false, error: "e", code: 5 }, false],
+    [{ ok: false, error: "e", code: "errNope" }, false],
     [{ ok: "yes", text: "x" }, false],
     [null, false],
   ])("%j → %s", (v, expected) => {

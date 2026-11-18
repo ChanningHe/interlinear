@@ -2,8 +2,10 @@ import { afterEach, describe, expect, test, vi } from "vitest";
 import { normalizeSettings } from "../src/core/settings";
 import {
   CONTENT_KEYS,
+  ERROR_CODES,
   UI_LANGUAGES,
   contentLabels,
+  localizeFailure,
   createT,
   format,
   languageLabel,
@@ -132,3 +134,20 @@ describe("default target language", () => {
     expect(normalizeSettings({}).targetLang).toBe("en");
   });
 });
+
+describe("error texts in pages", () => {
+  test("a failure code becomes text in the interface language, with the HTTP status filled in", () => {
+    const zh = contentLabels("zh-Hans");
+    expect(localizeFailure({ ok: false, error: "The service rejected…", code: "errRejected", status: 401 }, zh)).toEqual({
+      ok: false,
+      error: "服务拒绝了请求（HTTP 401），请检查设置中的 API Key。",
+    });
+    expect(localizeFailure({ ok: false, error: "Something else" }, zh)).toEqual({ ok: false, error: "Something else" }); // no code
+    expect(localizeFailure({ ok: true, text: "x" }, zh)).toEqual({ ok: true, text: "x" });
+  });
+
+  test("every error code is sent to pages, so each has a text there", () => {
+    expect(ERROR_CODES.filter((c) => !(CONTENT_KEYS as readonly string[]).includes(c))).toEqual([]);
+  });
+});
+

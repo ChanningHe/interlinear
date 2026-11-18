@@ -246,11 +246,18 @@ export interface ErrorView {
   readonly label: string;
   /** Page scripts can synthesize clicks; only real user clicks may spend API quota. */
   readonly requireTrustedClick: boolean;
+  /** A pause (allowance reached), shown as such rather than as a failure. */
+  readonly paused?: boolean;
 }
 
 export function showError(el: HTMLElement, view: ErrorView, onRetry: () => void): void {
   setState(el, "error");
-  el.title = view.message;
+  el.classList.toggle("bt-paused", view.paused === true);
+  el.title = view.message; // the whole text when the line below is cut short
+  // The reason, as text: messages are our own (provider bodies never reach the page).
+  const reason = document.createElement("span");
+  reason.className = "bt-error-reason";
+  reason.textContent = view.message;
   const button = document.createElement("button");
   button.type = "button";
   button.textContent = view.label;
@@ -260,7 +267,7 @@ export function showError(el: HTMLElement, view: ErrorView, onRetry: () => void)
     if (view.requireTrustedClick && !e.isTrusted) return;
     onRetry();
   });
-  el.replaceChildren(button);
+  el.replaceChildren(reason, button);
 }
 
 export function removeAllTranslations(root: Element): void {

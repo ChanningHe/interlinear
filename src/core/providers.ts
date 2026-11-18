@@ -1,4 +1,5 @@
 import { adapterOf, type WireKind } from "../providers/adapters";
+import type { ErrorCode } from "../shared/i18n";
 import type { Provider } from "./settings";
 
 export interface ChatRequest {
@@ -16,15 +17,28 @@ export interface CompleteOptions {
   readonly onText?: (text: string) => void;
 }
 
+export interface ProviderErrorDetails {
+  readonly status?: number;
+  readonly retryAfterMs?: number;
+  /** What kind of failure, for the text pages show; HTTP errors are told by `status`. */
+  readonly code?: ErrorCode;
+}
+
 export class ProviderError extends Error {
+  readonly status?: number;
+  readonly retryAfterMs?: number;
+  readonly code?: ErrorCode;
+
   constructor(
     message: string,
     readonly retryable: boolean,
-    readonly status?: number,
-    readonly retryAfterMs?: number,
+    details: ProviderErrorDetails = {},
   ) {
     super(message);
     this.name = "ProviderError";
+    this.status = details.status;
+    this.retryAfterMs = details.retryAfterMs;
+    this.code = details.code;
   }
 }
 
@@ -45,7 +59,7 @@ interface StreamDelta {
   readonly text?: string;
   readonly stop?: string;
   /** The service reported an error mid-stream; `final` errors (quota, eligibility) are not retried. */
-  readonly failed?: { readonly final: boolean; readonly message?: string };
+  readonly failed?: { readonly final: boolean; readonly message?: string; readonly code?: ErrorCode };
 }
 
 interface Wire {
@@ -55,15 +69,15 @@ interface Wire {
   event(data: unknown): StreamDelta;
 }
 
-const shapeError = () => new ProviderError("Unexpected response shape from provider", false);
+const shapeError = () => new ProviderError("Unexpected response shape from provider", false, { code: "errBadResponse" });
 
 const TRUNCATED = new Set(["length", "max_tokens"]);
 const REFUSED = new Set(["refusal", "content_filter"]);
 
 function checkStop(stop: unknown): void {
   if (typeof stop !== "string") return;
-  if (REFUSED.has(stop)) throw new ProviderError("Model refused to translate this content", false);
-  if (TRUNCATED.has(stop)) throw new ProviderError("Response truncated (max_tokens reached)", false);
+  if (REFUSED.has(stop)) throw new ProviderError("Model refused to translate this content", false, { code: "errRefused" });
+  if (TRUNCATED.has(stop)) throw new ProviderError("Response truncated (max_tokens reached)", false, { code: "errTruncated" });
 }
 
 const str = (v: unknown) => (typeof v === "string" ? v : undefined);
@@ -131,18 +145,18 @@ const anthropicWire: Wire = {
 };
 
 /** ChatGPT plan errors that retrying cannot fix (developers.openai.com/siwc, errors and recovery). */
-const FINAL_PLAN_ERRORS: ReadonlyMap<string, string> = new Map([
-  ["subscription_sharing_usage_limit_exceeded", "ChatGPT plan usage limit for this extension reached"],
-  ["subscription_sharing_user_not_eligible", "This ChatGPT account cannot use its plan in other apps"],
-  ["subscription_sharing_invalid_user", "Signed out of ChatGPT; sign in again in settings"],
+const FINAL_PLAN_ERRORS: ReadonlyMap<string, readonly [string, ErrorCode]> = new Map([
+  ["subscription_sharing_usage_limit_exceeded", ["ChatGPT plan usage limit for this extension reached", "errPlanLimit"]],
+  ["subscription_sharing_user_not_eligible", ["This ChatGPT account cannot use its plan in other apps", "errPlanNotEligible"]],
+  ["subscription_sharing_invalid_user", ["Signed out of ChatGPT; sign in again in settings", "errSignedOut"]],
 ]);
 
 type ResponsesError = { code?: unknown };
 
 function responsesFailure(error: ResponsesError | undefined): StreamDelta {
   const code = typeof error?.code === "string" ? error.code : "";
-  const message = FINAL_PLAN_ERRORS.get(code);
-  return { failed: message ? { final: true, message } : { final: false } };
+  const known = FINAL_PLAN_ERRORS.get(code);
+  return { failed: known ? { final: true, message: known[0], code: known[1] } : { final: false } };
 }
 
 /** OpenAI Responses API, as required for ChatGPT plan usage: streamed, never stored. */
@@ -221,7 +235,8 @@ async function readStream(body: ReadableStream<Uint8Array>, wire: Wire, onText?:
     }
     const delta = wire.event(data);
     if (delta.failed) {
-      throw new ProviderError(delta.failed.message ?? "The service reported an error while responding", !delta.failed.final);
+      const { message = "The service reported an error while responding", code = "errStream", final } = delta.failed;
+      throw new ProviderError(message, !final, { code });
     }
     if (delta.text) {
       text += delta.text;
@@ -254,7 +269,7 @@ async function readSse(body: ReadableStream<Uint8Array>, wire: Wire, onText?: (t
     return await readStream(body, wire, onText);
   } catch (e) {
     if (e instanceof ProviderError) throw e;
-    throw new ProviderError("Network error: " + (e as Error).message, true);
+    throw new ProviderError("Network error: " + (e as Error).message, true, { code: "errNetwork" });
   }
 }
 
@@ -265,7 +280,7 @@ async function readBody(res: Response, wire: Wire, onText?: (text: string) => vo
   try {
     raw = await res.text();
   } catch (e) {
-    throw new ProviderError("Network error: " + (e as Error).message, true);
+    throw new ProviderError("Network error: " + (e as Error).message, true, { code: "errNetwork" });
   }
   // Every request asks for a stream; some servers send one without the event-stream type.
   if (SSE_START_RE.test(raw)) return readSse(new Response(raw).body!, wire, onText);
@@ -287,7 +302,7 @@ async function attempt(wire: Wire, p: Provider, req: ChatRequest, opts: Complete
   const { signal } = opts;
   const spec = adapterOf(p.adapter);
   const token = spec.auth === "oauth" ? await opts.accessToken?.() : undefined;
-  if (spec.auth === "oauth" && !token) throw new ProviderError("Not signed in; sign in again in settings", false);
+  if (spec.auth === "oauth" && !token) throw new ProviderError("Not signed in; sign in again in settings", false, { code: "errSignedOut" });
   const request = wire.build(p, req, token);
   const { url, headers } = request;
   // Adapter options (reasoning, routing…) are plain body fields; they never touch URL or headers.
@@ -305,11 +320,11 @@ async function attempt(wire: Wire, p: Provider, req: ChatRequest, opts: Complete
     });
   } catch (e) {
     if (signal?.aborted) throw new ProviderError("Request aborted", false);
-    throw new ProviderError(`Network error: ${(e as Error).message}`, true);
+    throw new ProviderError(`Network error: ${(e as Error).message}`, true, { code: "errNetwork" });
   }
   if (!res.ok) {
     const retryable = res.status === 408 || res.status === 429 || res.status >= 500;
-    throw new ProviderError(`HTTP ${res.status}: ${await errorMessage(res)}`, retryable, res.status, retryAfterMs(res));
+    throw new ProviderError(`HTTP ${res.status}: ${await errorMessage(res)}`, retryable, { status: res.status, retryAfterMs: retryAfterMs(res) });
   }
   return readBody(res, wire, opts.onText);
 }
