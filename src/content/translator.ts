@@ -215,6 +215,8 @@ export function createPageTranslator(deps: PageTranslatorDeps) {
   let allowance = allowanceStep;
   let spent = 0;
   let paused: readonly Unit[] = [];
+  /** Paragraphs showing an error; one Retry click sends them all again. */
+  let failed: readonly Unit[] = [];
 
   const isCurrent = (u: Unit) => active && tracked.get(anchorOf(u))?.unit === u;
 
@@ -342,17 +344,29 @@ export function createPageTranslator(deps: PageTranslatorDeps) {
     paused: true,
   };
 
+  /** Sends paragraphs again that are still on the page with their box. */
+  function requeue(units: readonly Unit[]): void {
+    for (const u of units) {
+      const w = tracked.get(anchorOf(u))?.wrapper;
+      if (!isCurrent(u) || !w?.isConnected) continue;
+      showLoading(w);
+      enqueue(u);
+    }
+  }
+
   /** One confirmation resumes every paused paragraph. */
   function resumePaused(): void {
     allowance = spent + allowanceStep;
     const resumed = paused;
     paused = [];
-    for (const p of resumed) {
-      const w = tracked.get(anchorOf(p))?.wrapper;
-      if (!isCurrent(p) || !w?.isConnected) continue;
-      showLoading(w);
-      enqueue(p);
-    }
+    requeue(resumed);
+  }
+
+  /** A failure is usually the service's (rate limit, outage, restart), so one click retries every one. */
+  function retryFailed(): void {
+    const again = failed;
+    failed = [];
+    requeue(again);
   }
 
   function enqueue(u: Unit): void {
@@ -395,10 +409,8 @@ export function createPageTranslator(deps: PageTranslatorDeps) {
       if (mode !== "translation-only" || !hideOriginalsOf(u.host)) fitLater(u);
       return;
     }
-    showError(wrapper, retryView(r.error), () => {
-      showLoading(wrapper);
-      enqueue(u);
-    });
+    failed = [...failed, u];
+    showError(wrapper, retryView(r.error), retryFailed);
   }
 
   /** Translations to check, once laid out, for a box that cuts them off (line-clamped previews). */
@@ -625,6 +637,7 @@ export function createPageTranslator(deps: PageTranslatorDeps) {
       moved.clear();
       queue = [];
       paused = [];
+      failed = [];
       pendingRoots = new Set();
       tracked = new WeakMap();
       wrapperAnchor = new WeakMap();

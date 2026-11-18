@@ -142,6 +142,17 @@ describe("page translator", () => {
     await vi.waitFor(() => expect(translations()).toEqual(["成功"]));
   });
 
+  test("one retry click retries every failed paragraph on the page, in one request", async () => {
+    const translate = vi.fn(async (texts: readonly string[]): Promise<TranslateResult[]> => texts.map(() => ({ ok: false, error: "HTTP 503" })));
+    const t = setup("<p>First failing paragraph</p><p>Second failing paragraph</p><p>Third failing paragraph</p>", { translate });
+    t.start();
+    await vi.waitFor(() => expect(document.querySelectorAll("bt-tr.bt-error")).toHaveLength(3));
+    translate.mockImplementation(upper);
+    document.querySelector<HTMLButtonElement>("bt-tr.bt-error button")!.click();
+    await vi.waitFor(() => expect(translations()).toHaveLength(3));
+    expect(translate).toHaveBeenCalledTimes(2);
+  });
+
   test("pauses after the character allowance until the user confirms", async () => {
     const t = setup("<p>First paragraph text</p><p>Second paragraph text</p>", { charAllowance: 25 });
     t.start();
