@@ -1,6 +1,7 @@
 import type { DisplayMode } from "../core/settings";
 import {
   TRANSLATE_PORT,
+  UNSUPPORTED_PAGE,
   isTranslateResult,
   type BackgroundRequest,
   type ContentRequest,
@@ -17,6 +18,7 @@ import { installTripleSpace, translateField, type Field } from "./input";
 import { chromeDetector, createLanguageFilter, inputLanguage } from "./lang";
 import { createPopover, type Popover } from "./popover";
 import { installSelectionButton, selectionRect } from "./selection";
+import { isTranslatableDocument } from "./support";
 import { createPageTranslator, intersectionVisibility, type PageTranslateOptions } from "./translator";
 
 // Loaded either on demand (toolbar button, shortcut, context menu) or by the browser on sites the
@@ -201,9 +203,14 @@ function installHelpers(c: PageConfig): void {
   if (c.inputTranslation) installTripleSpace({ onTrigger: (field) => void translateInput(field, c) });
 }
 
+/** Requests that would insert into the page; refused up front where the page cannot hold them. */
+const PAGE_CHANGES: ReadonlySet<ContentRequest["type"]> = new Set(["toggle", "translate-hovered", "translate-selection"]);
+
 function onMessage(msg: ContentRequest): Promise<TabState> | TabState | undefined {
   // Keyboard commands (Alt+Q…) arrive while their modifier is still held: not a hover tap.
   if (msg?.type !== "state") hover?.cancelTap();
+  // Popups show this code as "This page cannot be translated" in the interface language.
+  if (PAGE_CHANGES.has(msg?.type) && !isTranslatableDocument(document)) return Promise.reject(new Error(UNSUPPORTED_PAGE));
   switch (msg?.type) {
     case "state":
       return state();
@@ -221,6 +228,7 @@ function onMessage(msg: ContentRequest): Promise<TabState> | TabState | undefine
 }
 
 async function init(): Promise<void> {
+  if (!isTranslatableDocument(document)) return; // XML, SVG, plain text: nothing to install
   const { config: c, autoTranslate } = await send<PageInit>({ type: "page-init" });
   config = c;
   installHelpers(c);
