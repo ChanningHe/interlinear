@@ -38,12 +38,14 @@ const LAYOUT_PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8">
 .clamped { width: 300px; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden } .clamped p { display: inline }</style>
 </head><body style="font:16px/1.5 sans-serif;max-width:640px;margin:24px auto">
   <div id="feed"><div id="clamp" class="clamped"><p>A long preview of a forum post that the site cuts off after two lines, so anything appended after it would never be seen by the reader at all.</p></div></div>
-  <div id="feed2"><div id="clamp2" class="clamped"><p><img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" width="12" height="12" alt=""> A preview with a picture in it, long enough that the site cuts it off after two lines of text for every reader.</p></div></div>
+  <div id="feed2"><div id="clamp2" class="clamped"><p><img src="data:image/gif;base64,R0lGODlhAQABAAAAACw=" width="40" height="40" alt=""> A preview with a picture in it, long enough that the site cuts it off after two lines of text for every reader.</p></div></div>
   <div style="display: flex; width: 300px"><a id="oneline" href="/c" style="display: block; height: 1.5em; overflow: hidden; white-space: nowrap; text-overflow: ellipsis">Merge branch with a long commit message that cannot fit in one line</a></div>
   <div id="ovcard" style="position: relative; width: 300px"><p id="under" style="pointer-events: none">Text beneath a link that covers the whole card</p><a href="/post" style="position: absolute; inset: 0"></a></div>
   <div id="pane" style="height: 60px; overflow: auto; width: 300px"><p>A paragraph in a scrolling pane that runs past the bottom edge of the pane, which the reader can scroll to and read in full.</p></div>
   <p id="obj">See <object role="none"><a href="/guide">the setup guide</a></object> for every detail.</p>
   <x-card id="card"><span slot="title">Slotted card title words</span>Unslotted counter words here</x-card>
+  <p id="lines" style="letter-spacing: 6px">First line of a shared paragraph<br>Second line after a break</p>
+  <div id="nest">Text before a nested list of points<ul id="nested" style="font-size: 12px"><li>Nested list point one</li></ul></div>
   <div id="live"><p id="tick">Posted by <a href="/u">someone</a> about the next release</p></div>
   <script>
     customElements.define("x-card", class extends HTMLElement {
@@ -268,6 +270,8 @@ try {
     const layoutUrl = `http://127.0.0.1:${port}/layout.html`;
     const layout = await context.newPage();
     await layout.goto(layoutUrl);
+    const sharedHtml = () => layout.evaluate(() => ["lines", "nest"].map((id) => document.getElementById(id).outerHTML));
+    const sharedOriginal = await sharedHtml();
     const send = (message) =>
       options.evaluate(
         async ([url, message]) => {
@@ -338,9 +342,44 @@ try {
     assert.deepEqual(flips, { showedOriginal: 0, replaced: 0 });
     assert.equal(requests.length, before);
 
-    await send({ type: "set-mode", mode: "bilingual" });
+    // Hosts shared by several paragraphs: text split by a line break, text before a nested list.
+    // Every original is hidden; the break and the list stay, the list at its own font size.
+    const shared = await layout.evaluate(() => {
+      const textWidth = (host) =>
+        [...host.childNodes].filter((n) => n.nodeType === Node.TEXT_NODE).reduce((sum, n) => {
+          const range = document.createRange();
+          range.selectNodeContents(n);
+          return sum + [...range.getClientRects()].reduce((w, r) => w + r.width, 0);
+        }, 0);
+      const lines = document.getElementById("lines");
+      const nest = document.getElementById("nest");
+      const nested = document.getElementById("nested");
+      const shown = (el) => el.getBoundingClientRect().height > 0;
+      return {
+        hosts: [lines, nest].map((h) => h.hasAttribute("data-bt-only")),
+        originalText: Math.round(textWidth(lines) + textWidth(nest)),
+        translations: [...document.querySelectorAll("#lines > bt-tr, #nest > bt-tr")].map(shown),
+        lineBreaks: [...lines.querySelectorAll("br")].map((br) => getComputedStyle(br).display),
+        list: { shown: shown(nested), fontSize: getComputedStyle(nested).fontSize },
+        nestedItem: nested.querySelector("li").hasAttribute("data-bt-only") && shown(nested.querySelector("li > bt-tr")),
+        spacing: [getComputedStyle(lines).letterSpacing, getComputedStyle(lines.querySelector("bt-tr")).letterSpacing],
+      };
+    });
+    assert.deepEqual(shared, {
+      hosts: [true, true],
+      originalText: 0,
+      translations: [true, true, true],
+      lineBreaks: ["inline"],
+      list: { shown: true, fontSize: "12px" },
+      nestedItem: true,
+      spacing: ["normal", "6px"],
+    });
+
+    // Turned off straight from translation only: the page is back exactly as it was.
     await send({ type: "toggle-tab" });
-    assert.equal(await layout.$("bt-tr, [data-bt-only]"), null);
+    assert.equal(await layout.$("bt-tr, [data-bt-only], [data-bt-hide]"), null);
+    assert.deepEqual(await sharedHtml(), sharedOriginal);
+    await send({ type: "set-mode", mode: "bilingual" });
 
     // Double-tapping Alt over a card that a transparent link covers translates the text beneath it.
     await layout.locator("#under").scrollIntoViewIfNeeded();

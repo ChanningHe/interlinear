@@ -171,18 +171,29 @@ bt-tr[data-bt].bt-done.bt-s-blur:focus-within {
 }
 
 /*
- * Translation only. The host's own text nodes collapse with font-size 0 and its elements are
- * hidden; the translation carries the original font-size and line-height inline, and the host
- * its original margins in --bt-mt / --bt-mb (render.ts).
+ * Translation only (only.ts). The host's own text nodes collapse with font-size 0 and no spacing;
+ * the elements of translated paragraphs are marked data-bt-hide and hidden. Every other child
+ * (a nested list, a line break, a control, a hover card) keeps its display and gets back the type
+ * it had, measured into --bt-fs / --bt-lh / --bt-ls / --bt-ws. The translations carry the host's
+ * type inline, and the host its original margins in --bt-mt / --bt-mb.
  */
 [data-bt-only] {
   font-size: 0 !important;
+  letter-spacing: 0 !important;
+  word-spacing: 0 !important;
   margin-top: var(--bt-mt, 0) !important;
   margin-bottom: var(--bt-mb, 0) !important;
 }
 
-[data-bt-only] > :not(bt-tr[data-bt]) {
+[data-bt-only] > [data-bt-hide] {
   display: none !important;
+}
+
+[data-bt-only] > :not(bt-tr[data-bt]):not([data-bt-only]):not([data-bt-hide]) {
+  font-size: var(--bt-fs, 1rem) !important;
+  line-height: var(--bt-lh, normal) !important;
+  letter-spacing: var(--bt-ls, normal) !important;
+  word-spacing: var(--bt-ws, normal) !important;
 }
 
 [data-bt-only] > bt-tr[data-bt] {
@@ -192,7 +203,7 @@ bt-tr[data-bt].bt-done.bt-s-blur:focus-within {
 
 /* List bullets and numbers use the host's font-size. */
 [data-bt-only]::marker {
-  font-size: 1rem;
+  font-size: var(--bt-fs, 1rem);
 }
 
 @media (prefers-reduced-motion: reduce) {

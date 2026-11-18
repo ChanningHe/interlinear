@@ -7,7 +7,7 @@ import {
   canHideOriginal,
   createWrapper,
   findClip,
-  hideOriginal,
+  hideOriginals,
   insertAfter,
   isLineClamped,
   isMoved,
@@ -16,12 +16,12 @@ import {
   movedLook,
   removeAllTranslations,
   removeWrapper,
-  restoreHost,
   showError,
   showLoading,
   showOriginal,
   showTranslation,
   withOriginalsShown,
+  type Placed,
 } from "./render";
 import { OWN_ATTR } from "./rules";
 import { plainText } from "./serialize";
@@ -98,7 +98,11 @@ function inViewport(host: Element): boolean {
 const anchorOf = (u: Unit): Node => u.nodes[u.nodes.length - 1]!;
 const isOwnNode = (n: Node) => n instanceof Element && n.hasAttribute(OWN_ATTR);
 const isInsideOwn = (n: Node) => (n instanceof Element ? n : n.parentElement)?.closest(`[${OWN_ATTR}]`) != null;
+const hasFinished = (host: Element) => host.querySelector(`:scope > bt-tr[${OWN_ATTR}].bt-done`) !== null;
 const message = (e: unknown) => (e instanceof Error ? e.message : String(e));
+
+/** The same paragraph in the same nodes: not re-rendered by the page. */
+const sameNodes = (a: Unit, b: Unit) => a.nodes.length === b.nodes.length && a.nodes.every((n, i) => n === b.nodes[i]);
 
 /**
  * Text that differs only in digits ("3 seconds ago" → "4 seconds ago", live counters) keeps its
@@ -147,12 +151,6 @@ const comparable = (serialized: string) => plainText(serialized).replace(/[^\p{L
 
 /** A "translation" that equals the original (names, brands, already-target text) adds only noise. */
 const isUnchanged = (u: Unit, translated: string) => comparable(u.text) === comparable(translated);
-
-function restoreOrphanedHost(target: Node): void {
-  if (target instanceof Element && target.hasAttribute(ONLY_ATTR) && !target.querySelector(`:scope > bt-tr[${OWN_ATTR}]`)) {
-    restoreHost(target);
-  }
-}
 
 /** Visible paragraphs plus two screens below and half a screen above. */
 export function intersectionVisibility(onVisible: (els: readonly Element[]) => void): Visibility {
@@ -222,6 +220,14 @@ export function createPageTranslator(deps: PageTranslatorDeps) {
     if (t) tracked.set(anchorOf(u), { ...t, ...patch });
   }
 
+  /** The paragraphs of a host with their translations, as last collected. */
+  function placedOf(host: Element): Placed[] {
+    return (hostUnits.get(host) ?? []).filter(isCurrent).map((unit) => ({ unit, wrapper: tracked.get(anchorOf(unit))?.wrapper }));
+  }
+
+  /** Shows only the host's translations if every text on it has one, else restores it. */
+  const hideOriginalsOf = (host: Element) => hideOriginals(host, placedOf(host));
+
   /** Drops translations whose paragraph changed or disappeared. */
   function pruneStale(root: Element, fresh: ReadonlyMap<Node, Unit>): void {
     root.querySelectorAll(`[${OWN_ATTR}]`).forEach((w) => {
@@ -248,8 +254,13 @@ export function createPageTranslator(deps: PageTranslatorDeps) {
     const known: Unit[] = [];
     for (const u of units) {
       const prev = tracked.get(anchorOf(u));
-      const unit = prev && sameShape(prev.unit.text, u.text) ? prev.unit : u;
-      if (unit === u) {
+      const same = prev !== undefined && sameShape(prev.unit.text, u.text);
+      // Same text in new nodes (a framework re-rendered them): a finished translation carries
+      // over to the current nodes, which translation-only must hide.
+      const renewed = same && prev.wrapper?.classList.contains("bt-done") === true && !sameNodes(prev.unit, u);
+      const unit = same && !renewed ? prev.unit : u;
+      if (renewed) tracked.set(anchorOf(u), { ...prev, unit });
+      else if (unit === u) {
         // The page rewrote it. pruneStale only sees translations inside `root`; one moved out of
         // a clipping box sits next to it.
         if (prev?.wrapper?.isConnected) removeWrapper(prev.wrapper);
@@ -270,6 +281,8 @@ export function createPageTranslator(deps: PageTranslatorDeps) {
     }
     // Every check reads layout; doing them all before any insertion keeps it to one layout pass.
     known.filter((u) => stillValid(u) && isRendered(u)).forEach(showRemembered);
+    // A host may have gained text no translation stands in for, or lost it again: checked both ways.
+    [...byHost.keys()].filter((h) => h.hasAttribute(ONLY_ATTR) || (mode === "translation-only" && hasFinished(h))).forEach(hideOriginalsOf);
   }
 
   function showRemembered(u: Unit): void {
@@ -374,8 +387,9 @@ export function createPageTranslator(deps: PageTranslatorDeps) {
     }
     if (r.ok) {
       showTranslation(wrapper, u, r.text);
-      // A paragraph that must stay bilingual (it shares its box, holds a picture) is fitted too.
-      if (mode !== "translation-only" || !hideOriginal(u, wrapper)) fitLater(u);
+      // A paragraph that must stay bilingual (text in its box is not translated yet, it holds a
+      // picture) is fitted too.
+      if (mode !== "translation-only" || !hideOriginalsOf(u.host)) fitLater(u);
       return;
     }
     showError(wrapper, retryView(r.error), () => {
@@ -421,7 +435,7 @@ export function createPageTranslator(deps: PageTranslatorDeps) {
       } else {
         // No room for both and nowhere to put the translation (a one-line cell in a flex row):
         // show the translation in the original's place rather than not at all.
-        hideOriginal(u, w);
+        hideOriginalsOf(u.host);
       }
     }
   }
@@ -466,9 +480,9 @@ export function createPageTranslator(deps: PageTranslatorDeps) {
       // A class flip on <body> or a page wrapper (scroll state, theme) would rescan everything.
       if (r.type === "attributes" && !isWithinScope(r.target)) continue;
       // The page deleted a translation that stood in for its original: show the original again.
-      if ([...r.removedNodes].some(isOwnNode)) restoreOrphanedHost(r.target);
+      if ([...r.removedNodes].some(isOwnNode) && r.target instanceof Element && r.target.hasAttribute(ONLY_ATTR)) hideOriginalsOf(r.target);
       if (r.type === "childList" && [...r.addedNodes, ...r.removedNodes].every(isOwnNode)) continue;
-      // Inside a translation-only paragraph every original child is display:none, so it is the
+      // Inside a translation-only paragraph the original's elements are hidden, so it is the
       // paragraph itself that has to be looked at again.
       const target = r.target instanceof Element ? r.target : r.target.parentElement;
       roots.add(target?.closest(`[${ONLY_ATTR}]`) ?? blockAncestor(r.target));
@@ -526,20 +540,26 @@ export function createPageTranslator(deps: PageTranslatorDeps) {
   /** Applies the display mode to every finished translation; no new requests. */
   function setMode(next: DisplayMode): void {
     mode = next;
-    deps.root.querySelectorAll<HTMLElement>(`bt-tr[${OWN_ATTR}].bt-done`).forEach((w) => {
-      const unit = tracked.get(wrapperAnchor.get(w) ?? w)?.unit;
-      if (next === "translation-only" && unit) {
-        // The translation replaces the original in its own box, if the original can be hidden.
-        if (isMoved(w) && canHideOriginal(unit) && stillValid(unit)) {
-          moveBack(unit, w);
-          moved.delete(w);
-        }
-        if (!hideOriginal(unit, w)) fitLater(unit);
-        return;
-      }
-      showOriginal(w);
-      if (unit) fitLater(unit);
-    });
+    const done = [...deps.root.querySelectorAll<HTMLElement>(`bt-tr[${OWN_ATTR}].bt-done`)].map((w) => ({
+      w,
+      unit: tracked.get(wrapperAnchor.get(w) ?? w)?.unit,
+    }));
+    if (next !== "translation-only") {
+      done.forEach(({ w, unit }) => {
+        showOriginal(w);
+        if (unit) fitLater(unit);
+      });
+      return;
+    }
+    // The translation replaces the original in its own box, if the original can be hidden.
+    for (const { w, unit } of done) {
+      if (!unit || !isMoved(w) || !canHideOriginal(unit) || !stillValid(unit)) continue;
+      moveBack(unit, w);
+      moved.delete(w);
+    }
+    const units = done.flatMap(({ unit }) => (unit ? [unit] : []));
+    const hidden = new Set([...new Set(units.map((u) => u.host))].filter(hideOriginalsOf));
+    units.filter((u) => !hidden.has(u.host)).forEach(fitLater);
   }
 
   return {

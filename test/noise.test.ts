@@ -269,7 +269,8 @@ describe("translator follow-ups (review findings)", () => {
 
   test("translation only keeps paragraphs with pictures bilingual, since pictures are not copied", async () => {
     const t = translator(
-      '<main><ul><li id="flag"><img src="fr.png" alt="France flag"> France country</li><li id="text">Plain country name</li></ul></main>',
+      // happy-dom has no UA stylesheet; browsers lay out <img> inline, inside the paragraph.
+      '<main><ul><li id="flag"><img src="fr.png" alt="France flag" style="display: inline"> France country</li><li id="text">Plain country name</li></ul></main>',
       { displayMode: "translation-only" },
     );
     t.start();

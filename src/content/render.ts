@@ -1,18 +1,16 @@
 import type { DisplayStyle } from "../core/settings";
 import type { Unit } from "./dom";
-import { MEDIA_TAGS, OWN_ATTR, isDropped, isMedia } from "./rules";
-import { deserialize, isEmojiImage, plainText } from "./serialize";
+import { clearTypography, restoreAllHosts, restoreHost } from "./only";
+import { OWN_ATTR } from "./rules";
+import { deserialize, plainText } from "./serialize";
+
+export { HIDE_ATTR, ONLY_ATTR, canHideOriginal, hideOriginals, restoreHost, withOriginalsShown, type Placed } from "./only";
 
 // Every translation is one <bt-tr data-bt> element inserted right after the paragraph's
 // last node, inside its host. An unknown custom tag inherits the page's font but no page CSS
 // targets it, and removing all [data-bt] nodes restores the page exactly.
 
 const TAG = "bt-tr";
-/** On a host whose only paragraph is translated: CSS hides the original, shows the translation. */
-export const ONLY_ATTR = "data-bt-only";
-
-/** Hiding these would take working controls away from the page. */
-const CONTROLS = "input,select,textarea,button";
 /** Shorter paragraphs (menu items, buttons, headings) get their translation on the same line. */
 const INLINE_MAX_CHARS = 24;
 
@@ -139,88 +137,11 @@ function setState(el: HTMLElement, state: "loading" | "done" | "error"): void {
   if (state !== "done") showOriginal(el);
 }
 
-const isBlank = (n: Node) => n.nodeType === Node.TEXT_NODE && (n.nodeValue ?? "").trim() === "";
-const isOwn = (n: Node) => n instanceof Element && n.hasAttribute(OWN_ATTR);
-const isControl = (n: Node) => n instanceof Element && (isDropped(n) || n.matches(CONTROLS) || n.querySelector(CONTROLS) !== null);
-const MEDIA_SELECTOR = [...MEDIA_TAGS].join(",");
-/** Pictures are not carried into translations, so hiding the original would lose them (emoji excepted). */
-const hasMedia = (n: Node) =>
-  n instanceof Element && [n, ...n.querySelectorAll(MEDIA_SELECTOR)].some((e) => isMedia(e) && !isEmojiImage(e));
-
-/**
- * Text nodes cannot be styled individually, so the original is only hidden when the paragraph
- * is all its host contains. Anything else on the host (a nested list, a second paragraph,
- * a checkbox) would disappear with it, so those paragraphs stay bilingual.
- */
-export function canHideOriginal(unit: Unit): boolean {
-  const own = new Set<Node>(unit.nodes);
-  const alone = [...unit.host.childNodes].every((n) => own.has(n) || isBlank(n) || isOwn(n));
-  return alone && !unit.nodes.some((n) => isControl(n) || hasMedia(n));
-}
-
-/** Shows only the translation. Returns false when the paragraph must stay bilingual. */
-export function hideOriginal(unit: Unit, wrapper: HTMLElement): boolean {
-  if (!wrapper.classList.contains("bt-done") || wrapper.parentElement !== unit.host || !canHideOriginal(unit)) return false;
-  if (unit.host.hasAttribute(ONLY_ATTR)) return true;
-  // The host's font-size becomes 0. The translation keeps the size the original had, and the
-  // host keeps its original margins (default margins are in em and would collapse to 0).
-  const style = getComputedStyle(unit.host);
-  wrapper.style.fontSize = style.fontSize;
-  wrapper.style.lineHeight = style.lineHeight;
-  if (unit.host instanceof HTMLElement) keepMargins(unit.host, style.marginTop, style.marginBottom);
-  unit.host.setAttribute(ONLY_ATTR, "");
-  return true;
-}
-
-interface SavedStyle {
-  readonly attr: string | null;
-  readonly cssText: string;
-}
-
-const savedStyles = new WeakMap<Element, SavedStyle>();
-const MARGIN_VARS = ["--bt-mt", "--bt-mb"] as const;
-
-function keepMargins(host: HTMLElement, top: string, bottom: string): void {
-  savedStyles.set(host, { attr: host.getAttribute("style"), cssText: host.style.cssText });
-  host.style.setProperty(MARGIN_VARS[0], top);
-  host.style.setProperty(MARGIN_VARS[1], bottom);
-}
-
-/** Puts the host's style attribute back exactly, unless the page restyled the host meanwhile. */
-export function restoreHost(host: Element): void {
-  host.removeAttribute(ONLY_ATTR);
-  const saved = savedStyles.get(host);
-  if (!saved || !(host instanceof HTMLElement)) return;
-  savedStyles.delete(host);
-  MARGIN_VARS.forEach((v) => host.style.removeProperty(v));
-  if (host.style.cssText !== saved.cssText) return;
-  if (saved.attr === null) host.removeAttribute("style");
-  else host.setAttribute("style", saved.attr);
-}
-
-/**
- * Runs `fn` while the translation-only paragraphs in and around `root` show their originals, so
- * detection sees the page as the page styled it: hidden originals would otherwise read as text
- * the page removed. Synchronous, so nothing is painted in between.
- */
-export function withOriginalsShown<T>(root: Element, fn: () => T): T {
-  const around: Element[] = [];
-  for (let el = root.parentElement?.closest(`[${ONLY_ATTR}]`); el; el = el.parentElement?.closest(`[${ONLY_ATTR}]`)) around.push(el);
-  const hosts = [...around, ...(root.hasAttribute(ONLY_ATTR) ? [root] : []), ...root.querySelectorAll(`[${ONLY_ATTR}]`)];
-  hosts.forEach((h) => h.removeAttribute(ONLY_ATTR));
-  try {
-    return fn();
-  } finally {
-    hosts.forEach((h) => h.setAttribute(ONLY_ATTR, ""));
-  }
-}
-
-/** Undoes hideOriginal for the host of this translation. */
+/** Undoes translation-only for the host of this translation. */
 export function showOriginal(wrapper: HTMLElement): void {
-  if (wrapper.parentElement) restoreHost(wrapper.parentElement);
-  wrapper.style.removeProperty("font-size");
-  wrapper.style.removeProperty("line-height");
-  if (wrapper.getAttribute("style") === "") wrapper.removeAttribute("style");
+  // A moved translation sits next to a box that is not its paragraph's host.
+  if (wrapper.parentElement && !isMoved(wrapper)) restoreHost(wrapper.parentElement);
+  clearTypography(wrapper);
 }
 
 /** Removes one translation and restores its host. */
@@ -272,6 +193,6 @@ export function showError(el: HTMLElement, view: ErrorView, onRetry: () => void)
 
 export function removeAllTranslations(root: Element): void {
   root.querySelectorAll(`${TAG}[${OWN_ATTR}]`).forEach(removeWrapper);
-  // Normally removed with each wrapper; also covers wrappers the page itself deleted.
-  [root, ...root.querySelectorAll(`[${ONLY_ATTR}]`)].forEach(restoreHost);
+  // Normally restored with each wrapper; also covers wrappers the page itself deleted.
+  restoreAllHosts(root);
 }

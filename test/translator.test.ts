@@ -170,8 +170,8 @@ describe("translation only", () => {
     const t = setup(html, { config: { ...config, displayMode: "translation-only" } });
     t.start();
     await vi.waitFor(() => expect(translations()).toHaveLength(3));
-    // #b also contains a nested list, so it must stay bilingual.
-    expect(onlyHosts()).toEqual(["a", "c"]);
+    // #b shares its box with a nested list: its text is hidden, the list stays.
+    expect(onlyHosts()).toEqual(["a", "b", "c"]);
     const wrapper = document.querySelector<HTMLElement>("#a > bt-tr")!;
     expect(wrapper.style.fontSize).not.toBe("");
     t.stop();
@@ -231,6 +231,70 @@ describe("translation only", () => {
     t.start();
     await vi.waitFor(() => expect(translations()).toHaveLength(1));
     expect(onlyHosts()).toEqual([]);
+  });
+
+  test("hides every original of a host shared by several paragraphs, and restores it exactly", async () => {
+    const html = '<p id="p">First line of the post<br>Second line of the post</p><div id="d">Lead text before a list<ul><li id="l">Nested item text</li></ul></div>';
+    const t = setup(html, { config: { ...config, displayMode: "translation-only" } });
+    t.start();
+    await vi.waitFor(() => expect(onlyHosts()).toEqual(["p", "d", "l"]));
+    t.setMode("bilingual");
+    expect(onlyHosts()).toEqual([]);
+    t.setMode("translation-only");
+    expect(onlyHosts()).toEqual(["p", "d", "l"]);
+    t.stop();
+    expect(document.body.innerHTML).toBe(html);
+  });
+
+  test("a shared host stays bilingual until every one of its paragraphs is translated", async () => {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((r) => (release = r));
+    const translate = vi.fn(async (texts: readonly string[]) => {
+      if (texts.some((x) => x.startsWith("Second"))) await gate;
+      return upper(texts);
+    });
+    const t = setup('<p id="p">First line of the post<br>Second line of the post</p>', {
+      config: { ...config, displayMode: "translation-only", maxItemsPerBatch: 1 },
+      translate,
+    });
+    t.start();
+    await vi.waitFor(() => expect(translations()).toEqual(["FIRST LINE OF THE POST"]));
+    expect(onlyHosts()).toEqual([]);
+    release();
+    await vi.waitFor(() => expect(onlyHosts()).toEqual(["p"]));
+  });
+
+  test("a hidden shared host is checked again when the page adds text to it", async () => {
+    const t = setup('<p id="p">First line of the post<br>Second line of the post</p>', { config: { ...config, displayMode: "translation-only" } });
+    t.start();
+    await vi.waitFor(() => expect(onlyHosts()).toEqual(["p"]));
+    const p = document.getElementById("p")!;
+    p.append(document.createElement("br"), "2024");
+    await vi.waitFor(() => expect(onlyHosts()).toEqual([]));
+    // The page takes the text away again: every text on the host has its translation once more.
+    p.lastChild!.remove();
+    p.lastChild!.remove();
+    await vi.waitFor(() => expect(onlyHosts()).toEqual(["p"]));
+  });
+
+  test("deleting one of several translations of a host shows its originals again", async () => {
+    const t = setup('<p id="p">First line of the post<br>Second line of the post</p>', { config: { ...config, displayMode: "translation-only" } });
+    t.start();
+    await vi.waitFor(() => expect(onlyHosts()).toEqual(["p"]));
+    document.querySelector("#p > bt-tr")!.remove();
+    await vi.waitFor(() => expect(onlyHosts()).toEqual([]));
+  });
+
+  test("a hidden host stays hidden when the page swaps its text for identical nodes", async () => {
+    const t = setup('<p id="p">Read <a href="#">the docs</a> first</p>', { config: { ...config, displayMode: "translation-only" } });
+    t.start();
+    await vi.waitFor(() => expect(onlyHosts()).toEqual(["p"]));
+    // Frameworks re-render text nodes with the same content (hydration, keyed updates).
+    const p = document.getElementById("p")!;
+    p.firstChild!.replaceWith(document.createTextNode("Read "));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(onlyHosts()).toEqual(["p"]);
+    expect(upper).toHaveBeenCalledTimes(1);
   });
 
   test("a failed or stale translation shows the original again", async () => {
@@ -386,7 +450,7 @@ describe("streaming and priority", () => {
 
 describe("translation-only stays put while the page changes", () => {
   // The same rule content.css uses to hide the original of a translation-only paragraph.
-  const hideRule = "[data-bt-only] > :not(bt-tr[data-bt]) { display: none !important; }";
+  const hideRule = "[data-bt-only] > [data-bt-hide] { display: none !important; }";
 
   test("a page update around a hidden original does not bring the original back", async () => {
     const style = document.createElement("style");

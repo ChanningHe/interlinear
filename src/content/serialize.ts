@@ -40,14 +40,20 @@ export const escapeText = (text: string) => text.replace(PLACEHOLDER_RE, (m) => 
 /** Emoji drawn as images (Twitter, Discourse, Slack) carry the character in alt; "×" or "»" do not count. */
 const EMOJI_ALT_RE = /^(?:\p{Extended_Pictographic}|\p{Regional_Indicator}|\p{Emoji_Modifier}|\u200D|\uFE0F){1,16}$/u;
 
-/** True for an image that stands for an emoji, which the translation keeps as text. */
+/** Discourse, GitHub and Slack name their emoji images by shortcode: alt=":slight_smile:". */
+const SHORTCODE_ALT_RE = /^:[\w+-]+:$/;
+
+const altOf = (el: Element) => (el.getAttribute("alt") ?? "").trim();
+const hasEmojiAlt = (el: Element) => el.localName === "img" && EMOJI_ALT_RE.test(altOf(el));
+
+/** True for an image that stands for an emoji: decoration of the text, not content of its own. */
 export function isEmojiImage(el: Element): boolean {
-  return el.localName === "img" && EMOJI_ALT_RE.test((el.getAttribute("alt") ?? "").trim());
+  return hasEmojiAlt(el) || (el.localName === "img" && (el.classList.contains("emoji") || SHORTCODE_ALT_RE.test(altOf(el))));
 }
 
-/** Text an image contributes: its alt when that is an emoji, otherwise nothing. */
+/** Text an image contributes: its alt when that is an emoji character, otherwise nothing. */
 function mediaText(el: Element): string {
-  return isEmojiImage(el) ? escapeText((el.getAttribute("alt") ?? "").trim()) : "";
+  return hasEmojiAlt(el) ? escapeText(altOf(el)) : "";
 }
 
 /** Not part of what a reader sees: dropped from the text, never cloned into the translation. */
