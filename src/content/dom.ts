@@ -1,4 +1,4 @@
-import { ATOMIC_TAGS, BOUNDARY_TAGS, INLINE_TAGS, OWN_ATTR, isChrome, isNoise, isSkipped, looksLikeCode } from "./rules";
+import { ATOMIC_TAGS, BOUNDARY_TAGS, CONTROL_SELECTOR, INLINE_TAGS, OWN_ATTR, isChrome, isNoise, isSkipped, looksLikeCode } from "./rules";
 import { MAX_TEXT_LENGTH } from "../shared/messages";
 import { plainText, serialize, type Tokens } from "./serialize";
 
@@ -73,10 +73,21 @@ function hasTextOutsideTime(node: Node): boolean {
   return [...node.childNodes].some(hasTextOutsideTime);
 }
 
+/**
+ * Controls that add no text (label chips after a title, a checkbox before its label) are not part
+ * of the paragraph: they stay shown in translation-only mode, and the translation follows the text.
+ */
+function isBareControl(n: Node): boolean {
+  if (!(n instanceof Element) || (!n.matches(CONTROL_SELECTOR) && n.querySelector(CONTROL_SELECTOR) === null)) return false;
+  return serialize([n]).text === "";
+}
+
+const isEdge = (n: Node) => isWhitespace(n) || isBareControl(n);
+
 function makeUnit(host: Element, run: readonly Node[]): Unit | undefined {
-  const start = run.findIndex((n) => !isWhitespace(n));
+  const start = run.findIndex((n) => !isEdge(n));
   if (start === -1) return undefined;
-  const end = run.findLastIndex((n) => !isWhitespace(n));
+  const end = run.findLastIndex((n) => !isEdge(n));
   const nodes = run.slice(start, end + 1);
   if (!nodes.some(hasTextOutsideTime)) return undefined;
   const { text, tokens } = serialize(nodes);

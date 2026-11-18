@@ -59,7 +59,7 @@ describe("images that do not keep an original visible", () => {
 
   test("a content picture keeps its paragraph bilingual", () => {
     const [big, labelled] = translateAll(
-      `<p><img ${INLINE} alt="" width="200" height="120"> Paragraph with a large picture</p><p><svg ${INLINE} width="16" height="16"></svg> Icon the page labels as content</p>`,
+      `<p><img ${INLINE} alt="" width="200" height="120"> Paragraph with a large picture</p><p><svg ${INLINE} aria-label="Chart" width="200" height="120"></svg> Chart the page labels as content</p>`,
     );
     expect(canHideOriginal(big!.unit)).toBe(false);
     expect(canHideOriginal(labelled!.unit)).toBe(false);

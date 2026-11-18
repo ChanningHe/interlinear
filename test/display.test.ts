@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test } from "vitest";
 import { collectUnits } from "../src/content/dom";
+import { HIDE_ATTR, ONLY_ATTR, canHideOriginal, createWrapper, hideOriginals, insertAfter, showTranslation } from "../src/content/render";
 import { plainText } from "../src/content/serialize";
 
 // Display fixes found on real sites (GitHub, Stack Overflow, YouTube). Markup is reduced to
@@ -13,6 +14,18 @@ const texts = (html: string, skipChrome = false) => {
   document.body.innerHTML = html;
   return collectUnits(document.body, { skipChrome }).map((u) => plainText(u.text));
 };
+
+const byId = (id: string) => document.getElementById(id)!;
+
+function translateAll(html: string) {
+  document.body.innerHTML = html;
+  return collectUnits(document.body).map((unit) => {
+    const wrapper = createWrapper(unit, "zh", "plain");
+    insertAfter(unit, wrapper);
+    showTranslation(wrapper, unit, unit.text.toUpperCase());
+    return { unit, wrapper };
+  });
+}
 
 describe("code drawn with divs", () => {
   const MONO = "font-family: ui-monospace, SFMono-Regular, Menlo, monospace";
@@ -56,5 +69,33 @@ describe("short button labels are page chrome in content scope", () => {
       <div role="button" tabindex="0"><h3>Card title</h3></div>
       <div role="button" tabindex="0"><p>A long clickable card that holds real post content inside it</p></div></main>`;
     expect(texts(html, true)).toEqual(["Card title", "A long clickable card that holds real post content inside it"]);
+  });
+});
+
+describe("translation only next to chips and status icons", () => {
+  const INLINE = 'style="display: inline"';
+
+  test("label chips after a title do not keep the title bilingual, and stay shown", () => {
+    const placed = translateAll(
+      `<div id="row"><h3 ${INLINE}><a href="#">Confusing message on inconsistent</a></h3><span></span>` +
+        `<span id="chips"><button aria-label="Filter by label A-diagnostics">A-diagnostics</button></span></div>`,
+    );
+    expect(placed.map((p) => plainText(p.unit.text))).toEqual(["Confusing message on inconsistent"]);
+    expect(hideOriginals(byId("row"), placed)).toBe(true);
+    expect(byId("chips").hasAttribute(HIDE_ATTR)).toBe(false);
+  });
+
+  test("a small labelled status icon is decoration", () => {
+    const [p] = translateAll(
+      `<a id="t" href="#" style="display: block"><span><svg ${INLINE} role="img" aria-label="Status: Open." width="16" height="16"></svg></span><span>Tracking issue title</span></a>`,
+    );
+    expect(canHideOriginal(p!.unit)).toBe(true);
+    expect(hideOriginals(byId("t"), [p!])).toBe(true);
+    expect(byId("t").hasAttribute(ONLY_ATTR)).toBe(true);
+  });
+
+  test("a labelled picture of unknown size is still content", () => {
+    const [p] = translateAll(`<p><img ${INLINE} alt="Diagram of the pipeline"> Paragraph under a picture</p>`);
+    expect(canHideOriginal(p!.unit)).toBe(false);
   });
 });

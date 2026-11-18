@@ -1,5 +1,5 @@
 import type { Unit } from "./dom";
-import { MEDIA_TAGS, OWN_ATTR, isDropped, isMedia } from "./rules";
+import { CONTROL_SELECTOR, MEDIA_TAGS, OWN_ATTR, isDropped, isMedia } from "./rules";
 import { isEmojiImage } from "./serialize";
 
 // Translation only. Text nodes cannot be styled one by one, so the host's font-size goes to 0
@@ -13,8 +13,6 @@ export const ONLY_ATTR = "data-bt-only";
 /** On an element of a translated paragraph, directly inside such a host: hidden with its text. */
 export const HIDE_ATTR = "data-bt-hide";
 
-/** Hiding these would take working controls away from the page. */
-const CONTROLS = "input,select,textarea,button";
 const MEDIA_SELECTOR = [...MEDIA_TAGS].join(",");
 /** Never rendered, whatever their CSS: no type size to give back. */
 const NON_RENDERING: ReadonlySet<string> = new Set(["script", "style", "link", "meta", "template"]);
@@ -24,7 +22,7 @@ const DECORATIVE_MAX_EM = 1.5;
 const isOwn = (n: Node): n is HTMLElement => n instanceof HTMLElement && n.hasAttribute(OWN_ATTR);
 const isVisibleText = (n: Node) => n.nodeType === Node.TEXT_NODE && (n.nodeValue ?? "").trim() !== "";
 const isControl = (n: Node) =>
-  n instanceof Element && ((isDropped(n) && !isMedia(n)) || n.matches(CONTROLS) || n.querySelector(CONTROLS) !== null);
+  n instanceof Element && ((isDropped(n) && !isMedia(n)) || n.matches(CONTROL_SELECTOR) || n.querySelector(CONTROL_SELECTOR) !== null);
 
 /** Hidden from assistive technology or marked as presentation, between `el` and `top`. */
 function isSilent(el: Element, top: Element): boolean {
@@ -35,19 +33,28 @@ function isSilent(el: Element, top: Element): boolean {
   return false;
 }
 
-/** Laid-out size, or the size its attributes ask for when it has no layout yet. */
-function isSmall(el: Element): boolean {
+/**
+ * Laid-out size, or the size its attributes ask for when it has no layout yet. A size that is
+ * still unknown counts as small only for `unknownIsSmall`.
+ */
+function isSmall(el: Element, unknownIsSmall: boolean): boolean {
   const max = (Number.parseFloat(getComputedStyle(el).fontSize) || 16) * DECORATIVE_MAX_EM;
   const r = el.getBoundingClientRect();
   const width = r.width || Number(el.getAttribute("width")) || 0;
   const height = r.height || Number(el.getAttribute("height")) || 0;
+  if (width === 0 && height === 0) return unknownIsSmall;
   return width <= max && height <= max;
 }
 
+/**
+ * Status glyphs and other icons next to text are decoration even when labelled ("Status: Open"):
+ * the label is not part of the paragraph. A picture of unknown size is content unless it is silent.
+ */
+const isDecorative = (el: Element, top: Element) => isEmojiImage(el) || isSmall(el, isSilent(el, top));
+
 /** Pictures are not carried into translations, so hiding one would lose it (emoji and small icons excepted). */
 const hasContentMedia = (n: Node) =>
-  n instanceof Element &&
-  [n, ...n.querySelectorAll(MEDIA_SELECTOR)].some((e) => isMedia(e) && !isEmojiImage(e) && !(isSilent(e, n) && isSmall(e)));
+  n instanceof Element && [n, ...n.querySelectorAll(MEDIA_SELECTOR)].some((e) => isMedia(e) && !isDecorative(e, n));
 
 /** The paragraph holds nothing its translation would lose: no controls, no pictures. */
 export function canHideOriginal(unit: Unit): boolean {

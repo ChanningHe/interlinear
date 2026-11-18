@@ -31,6 +31,9 @@ export const SKIP_TAGS: ReadonlySet<string> = new Set([
   "embed", "head",
 ]);
 
+/** Form controls and buttons: never hidden or cloned, since the page needs them working. */
+export const CONTROL_SELECTOR = "input,select,textarea,button";
+
 /** Elements that always end the current paragraph, whatever their CSS display. */
 export const BOUNDARY_TAGS: ReadonlySet<string> = new Set(["br", "button"]);
 
