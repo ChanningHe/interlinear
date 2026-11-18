@@ -76,6 +76,18 @@ export function isAtomic(el: Element): boolean {
   return ATOMIC_TAGS.has(el.localName) || isNoTranslate(el);
 }
 
+// ---- Code drawn without <pre>: code views and editors built from divs ---------------------------
+
+/** white-space values that keep every space and line break, as source code needs. */
+const PRESERVED_WHITESPACE: ReadonlySet<string> = new Set(["pre", "pre-wrap", "break-spaces"]);
+/** Generic monospace keywords and the fonts code stacks name. */
+const MONOSPACE_RE = /monospace|\bmono\b|courier|consolas|menlo|monaco/i;
+
+/** Monospace text that keeps its whitespace: code (GitHub's code view, CodeMirror, Monaco). Prose in pre-wrap uses a text font. */
+export function looksLikeCode(style: CSSStyleDeclaration): boolean {
+  return PRESERVED_WHITESPACE.has(style.whiteSpace) && MONOSPACE_RE.test(style.fontFamily);
+}
+
 // ---- Noise: content that is on the page but not meant to be read there --------------------------
 
 /** Class names CSS frameworks use for text meant only for screen readers. */

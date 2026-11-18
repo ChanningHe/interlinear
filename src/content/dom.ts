@@ -1,4 +1,4 @@
-import { ATOMIC_TAGS, BOUNDARY_TAGS, INLINE_TAGS, OWN_ATTR, isChrome, isNoise, isSkipped } from "./rules";
+import { ATOMIC_TAGS, BOUNDARY_TAGS, INLINE_TAGS, OWN_ATTR, isChrome, isNoise, isSkipped, looksLikeCode } from "./rules";
 import { MAX_TEXT_LENGTH } from "../shared/messages";
 import { plainText, serialize, type Tokens } from "./serialize";
 
@@ -83,9 +83,12 @@ function makeUnit(host: Element, run: readonly Node[]): Unit | undefined {
   return isTranslatable(text) ? { host, nodes, text, tokens, source: sourceOf(nodes) } : undefined;
 }
 
+/** A block of code drawn with divs; a monospace span inside a sentence stays part of it. */
+const isCodeBlock = (el: Element, style: CSSStyleDeclaration) => looksLikeCode(style) && !isInline(el, style.display);
+
 /** Elements whose whole subtree is left untranslated under these options. */
 function isExcluded(el: Element, style: CSSStyleDeclaration, opts: CollectOptions): boolean {
-  return isNoise(el, style) || (opts.skipChrome === true && isChrome(el));
+  return isNoise(el, style) || isCodeBlock(el, style) || (opts.skipChrome === true && isChrome(el));
 }
 
 function visit(container: Element, out: Unit[], opts: CollectOptions): void {
