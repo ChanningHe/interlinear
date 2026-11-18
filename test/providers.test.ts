@@ -152,10 +152,35 @@ describe("streaming", () => {
   test("mid-stream errors are retried and never echo server text", async () => {
     const fetchFn = mockFetch(
       sse([{ type: "error", error: { type: "overloaded_error", message: "internal gw-7.corp" } }]),
-      sse([{ type: "content_block_delta", delta: { type: "text_delta", text: "ok" } }]),
+      sse([{ type: "content_block_delta", delta: { type: "text_delta", text: "ok" } }, { type: "message_stop" }]),
     );
     await expect(complete(anthropic, req, noSleep)).resolves.toBe("ok");
     expect(fetchFn).toHaveBeenCalledTimes(2);
+  });
+
+  test("a stream that ends without its end signal is a retryable stream error, then retried", async () => {
+    const fetchFn = mockFetch(
+      sse([{ choices: [{ delta: { content: "half a sen" } }] }], "\n\n"),
+      sse([{ type: "content_block_delta", delta: { type: "text_delta", text: "cut" } }]),
+      sse([{ choices: [{ delta: { content: "cut" } }] }]),
+    );
+    const err = await complete(openai, req, noSleep).catch((e: unknown) => e);
+    expect(err).toMatchObject({ retryable: true, code: "errStream" });
+    expect(fetchFn).toHaveBeenCalledTimes(3);
+    const cut = () => sse([{ type: "content_block_delta", delta: { type: "text_delta", text: "cut" } }]);
+    mockFetch(cut(), cut(), cut());
+    await expect(complete(anthropic, req, noSleep)).rejects.toMatchObject({ code: "errStream" });
+  });
+
+  test("each wire's own end signal completes a stream", async () => {
+    mockFetch(sse([{ choices: [{ delta: { content: "a" } }] }, "data: [DONE]"]));
+    await expect(complete(openai, req, noSleep)).resolves.toBe("a");
+    mockFetch(sse([{ choices: [{ delta: { content: "b" }, finish_reason: "stop" }] }]));
+    await expect(complete(openai, req, noSleep)).resolves.toBe("b");
+    mockFetch(sse([{ type: "content_block_delta", delta: { type: "text_delta", text: "c" } }, { type: "message_delta", delta: { stop_reason: "end_turn" } }]));
+    await expect(complete(anthropic, req, noSleep)).resolves.toBe("c");
+    mockFetch(sse([{ type: "content_block_delta", delta: { type: "text_delta", text: "d" } }, { type: "message_stop" }]));
+    await expect(complete(anthropic, req, noSleep)).resolves.toBe("d");
   });
 
   test("handles events split across network chunks", async () => {

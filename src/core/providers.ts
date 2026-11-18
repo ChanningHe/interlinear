@@ -58,6 +58,8 @@ interface WireRequest {
 interface StreamDelta {
   readonly text?: string;
   readonly stop?: string;
+  /** The wire's own end-of-reply event (Anthropic message_stop, Responses response.completed). */
+  readonly done?: boolean;
   /** The service reported an error mid-stream; `final` errors (quota, eligibility) are not retried. */
   readonly failed?: { readonly final: boolean; readonly message?: string; readonly code?: ErrorCode };
 }
@@ -140,6 +142,7 @@ const anthropicWire: Wire = {
     if (d?.type === "error") return { failed: { final: false } };
     if (d?.type === "content_block_delta" && d.delta?.type === "text_delta") return { text: str(d.delta.text) };
     if (d?.type === "message_delta") return { stop: str(d.delta?.stop_reason) };
+    if (d?.type === "message_stop") return { done: true };
     return {};
   },
 };
@@ -187,6 +190,8 @@ const responsesWire: Wire = {
     switch (d?.type) {
       case "response.output_text.delta":
         return { text: str(d.delta) };
+      case "response.completed":
+        return { done: true };
       case "response.refusal.delta":
         return { stop: "refusal" };
       case "response.incomplete":
@@ -221,12 +226,13 @@ async function readStream(body: ReadableStream<Uint8Array>, wire: Wire, onText?:
   let buffer = "";
   let text = "";
   let stop: string | undefined;
+  let ended = false;
   /** Returns true at the end-of-stream sentinel. */
   const onLine = (raw: string): boolean => {
     const line = raw.replace(/\r$/, "");
     if (!line.startsWith("data:")) return false;
     const payload = line.slice(5).trim();
-    if (payload === "[DONE]") return true;
+    if (payload === "[DONE]") return (ended = true);
     let data: unknown;
     try {
       data = JSON.parse(payload);
@@ -243,6 +249,7 @@ async function readStream(body: ReadableStream<Uint8Array>, wire: Wire, onText?:
       onText?.(text);
     }
     stop = delta.stop ?? stop;
+    ended ||= delta.done === true;
     return false;
   };
   for (;;) {
@@ -258,6 +265,8 @@ async function readStream(body: ReadableStream<Uint8Array>, wire: Wire, onText?:
   }
   if (buffer) onLine(buffer);
   checkStop(stop);
+  // A proxy or server closing the connection mid-reply looks like a normal end; never accept it.
+  if (!ended && stop === undefined) throw new ProviderError("Stream ended before the reply was complete", true, { code: "errStream" });
   return text;
 }
 
