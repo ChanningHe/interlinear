@@ -617,6 +617,8 @@ export function createPageTranslator(deps: PageTranslatorDeps) {
   return {
     /** True while anything is translated: the whole page or hovered regions. */
     isActive: () => active,
+    /** True only for whole-page translation, not for individual hovered regions. */
+    isWholePage: () => wholePage,
     getMode: () => mode,
     setMode,
     start(): void {

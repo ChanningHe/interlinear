@@ -129,8 +129,9 @@ async function ensureTranslator(): Promise<PageTranslator> {
   return translator;
 }
 
+/** `active` means the whole page is translated: hovered paragraphs alone leave "Translate page" on offer. */
 const state = (): TabState => ({
-  active: translator?.isActive() ?? false,
+  active: translator?.isWholePage() ?? false,
   mode: translator?.getMode() ?? pageMode ?? config?.displayMode,
 });
 
@@ -145,7 +146,7 @@ function toggle(): Promise<TabState> {
 }
 
 async function runToggle(): Promise<TabState> {
-  if (translator?.isActive()) {
+  if (translator?.isWholePage()) {
     translator.stop();
     translator = undefined;
     return state();
@@ -232,7 +233,7 @@ async function init(): Promise<void> {
   const { config: c, autoTranslate } = await send<PageInit>({ type: "page-init" });
   config = c;
   installHelpers(c);
-  if (autoTranslate && !translator?.isActive()) await toggle();
+  if (autoTranslate && !translator?.isWholePage()) await toggle();
 }
 
 if (!window.__interlinearLoaded) {
