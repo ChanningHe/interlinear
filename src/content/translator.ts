@@ -217,6 +217,11 @@ export function createPageTranslator(deps: PageTranslatorDeps) {
   let paused: readonly Unit[] = [];
   /** Paragraphs showing an error; one Retry click sends them all again. */
   let failed: readonly Unit[] = [];
+  /**
+   * Texts on their way to the service, with the other paragraphs waiting for the same text (the
+   * page rendered it again, or repeats it) so it is requested once.
+   */
+  let waiting: ReadonlyMap<string, readonly Unit[]> = new Map();
 
   const isCurrent = (u: Unit) => active && tracked.get(anchorOf(u))?.unit === u;
 
@@ -370,6 +375,11 @@ export function createPageTranslator(deps: PageTranslatorDeps) {
   }
 
   function enqueue(u: Unit): void {
+    const followers = waiting.get(u.text);
+    if (followers) {
+      waiting = new Map([...waiting, [u.text, [...followers, u]]]);
+      return;
+    }
     const wrapper = tracked.get(anchorOf(u))?.wrapper;
     if (wrapper && spent + u.text.length > allowance) {
       paused = [...paused, u];
@@ -377,6 +387,7 @@ export function createPageTranslator(deps: PageTranslatorDeps) {
       return;
     }
     spent += u.text.length;
+    waiting = new Map([...waiting, [u.text, []]]);
     queue = [...queue, u];
     queueTimer ??= setTimeout(flush, queueDelay);
   }
@@ -475,8 +486,11 @@ export function createPageTranslator(deps: PageTranslatorDeps) {
       if (shown.has(i) || !batch[i]) return;
       shown.add(i);
       // The allowance limits what the service is asked for; a cache hit cost nothing.
-      if (r.ok && r.cached) spent -= batch[i].text.length;
-      show(batch[i], r);
+      const { text } = batch[i];
+      if (r.ok && r.cached) spent -= text.length;
+      const followers = waiting.get(text) ?? [];
+      waiting = new Map([...waiting].filter(([k]) => k !== text));
+      [batch[i], ...followers].forEach((u) => show(u, r));
     };
     try {
       const results = await deps.translate(
@@ -640,6 +654,7 @@ export function createPageTranslator(deps: PageTranslatorDeps) {
       queue = [];
       paused = [];
       failed = [];
+      waiting = new Map();
       pendingRoots = new Set();
       tracked = new WeakMap();
       wrapperAnchor = new WeakMap();

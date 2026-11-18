@@ -112,6 +112,23 @@ describe("page translator", () => {
     await vi.waitFor(() => expect(translations()).toEqual(["NEW PAGE TEXT", "ADDED AFTER THE SWAP"]));
   });
 
+  test("a paragraph re-rendered while its translation is on the way is not requested again", async () => {
+    let release = () => {};
+    const gate = new Promise<void>((r) => (release = r));
+    const translate = vi.fn(async (texts: readonly string[]) => {
+      await gate;
+      return upper(texts);
+    });
+    const t = setup("<p>Static paragraph text</p>", { translate });
+    t.start();
+    await vi.waitFor(() => expect(translate).toHaveBeenCalledTimes(1));
+    document.body.innerHTML = "<p>Static paragraph text</p>"; // the page renders it again, new nodes
+    await new Promise((r) => setTimeout(r, 20));
+    release();
+    await vi.waitFor(() => expect(translations()).toEqual(["STATIC PARAGRAPH TEXT"]));
+    expect(translate).toHaveBeenCalledTimes(1);
+  });
+
   test("re-translates a paragraph whose text changed", async () => {
     const t = setup("<p id='p'>Old text here</p>");
     t.start();
