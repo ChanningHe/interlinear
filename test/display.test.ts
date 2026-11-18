@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test } from "vitest";
-import { collectUnits } from "../src/content/dom";
+import { collectUnits, contentRoots } from "../src/content/dom";
 import { HIDE_ATTR, ONLY_ATTR, canHideOriginal, createWrapper, hideOriginals, insertAfter, showTranslation } from "../src/content/render";
 import { plainText } from "../src/content/serialize";
 
@@ -97,5 +97,21 @@ describe("translation only next to chips and status icons", () => {
   test("a labelled picture of unknown size is still content", () => {
     const [p] = translateAll(`<p><img ${INLINE} alt="Diagram of the pipeline"> Paragraph under a picture</p>`);
     expect(canHideOriginal(p!.unit)).toBe(false);
+  });
+});
+
+describe("the page title outside the main landmark", () => {
+  const LONG = `<p>${"Question body text. ".repeat(30)}</p>`;
+
+  test("is translated with the main content", () => {
+    document.body.innerHTML = `<header><h1>Site name</h1></header><div id="qh"><h1 id="t">Why is a sorted array faster?</h1></div><main>${LONG}</main>`;
+    const roots = contentRoots(document.body);
+    expect(roots).toContain(byId("t"));
+    expect(roots.map((r) => r.localName)).toEqual(["h1", "main"]);
+  });
+
+  test("is not added when the main landmark has its own", () => {
+    document.body.innerHTML = `<div><h1>Banner heading</h1></div><main><h1>Article title</h1>${LONG}</main>`;
+    expect(contentRoots(document.body).map((r) => r.localName)).toEqual(["main"]);
   });
 });

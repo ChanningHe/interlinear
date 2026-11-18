@@ -169,9 +169,22 @@ function readableLength(el: Element): number {
   return length;
 }
 
+/** Where a heading is a site name or a widget title, not the page's title. */
+const TITLE_CHROME =
+  "header,nav,footer,aside,dialog,[role=banner],[role=navigation],[role=contentinfo],[role=complementary],[role=dialog]";
+
+/** The page's title when pages put it above their main column instead of inside it. */
+function titleOutside(body: Element, mains: readonly Element[]): Element | undefined {
+  if (mains.some((m) => m.querySelector("h1") !== null)) return undefined;
+  return [...body.querySelectorAll("h1")].find(
+    (h) => h.closest(TITLE_CHROME) === null && display(h) !== "none" && !isInsideSkipped(h),
+  );
+}
+
 /**
  * Where the page's own content lives: its main landmark(s) when they hold a fair share of the
- * text, otherwise the whole body (chrome is then skipped element by element).
+ * text, plus the page title if it sits outside them; otherwise the whole body (chrome is then
+ * skipped element by element).
  */
 export function contentRoots(body: Element): Element[] {
   const mains = [...body.querySelectorAll(MAIN_SELECTOR)].filter(
@@ -179,7 +192,9 @@ export function contentRoots(body: Element): Element[] {
   );
   if (mains.length === 0) return [body];
   const covered = mains.reduce((n, m) => n + readableLength(m), 0);
-  return covered >= readableLength(body) * MIN_MAIN_SHARE ? mains : [body];
+  if (covered < readableLength(body) * MIN_MAIN_SHARE) return [body];
+  const title = titleOutside(body, mains);
+  return title ? [title, ...mains] : mains;
 }
 
 /** The element whose paragraphs must be re-collected when `node` changes. */
