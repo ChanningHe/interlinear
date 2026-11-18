@@ -1,13 +1,22 @@
 /* Injected with content.js. Every rule targets our own elements (bt-tr, bt-popover) or the hosts we mark. */
 
 /*
+ * Every !important rule sits in the `bt` cascade layer. An important declaration in a layer beats
+ * any unlayered important one whatever its specificity, so page utility classes such as
+ * `.h3 { font-size: 20px !important }` cannot undo them. Injected sheets come before the page's,
+ * so `bt` is also the first layer declared, whose important rules win over later layers'.
+ */
+
+/*
  * Our elements are custom elements nobody defines (content scripts cannot), and some sites hide
  * every undefined one while their components load: `:not(:defined) { visibility: hidden }`.
  * `inherit` keeps us exactly as visible as where we are placed, so text a page hides stays hidden.
  */
-bt-tr[data-bt],
-bt-popover[data-bt] {
-  visibility: inherit !important;
+@layer bt {
+  bt-tr[data-bt],
+  bt-popover[data-bt] {
+    visibility: inherit !important;
+  }
 }
 
 bt-tr[data-bt] {
@@ -177,23 +186,25 @@ bt-tr[data-bt].bt-done.bt-s-blur:focus-within {
  * it had, measured into --bt-fs / --bt-lh / --bt-ls / --bt-ws. The translations carry the host's
  * type inline, and the host its original margins in --bt-mt / --bt-mb.
  */
-[data-bt-only] {
-  font-size: 0 !important;
-  letter-spacing: 0 !important;
-  word-spacing: 0 !important;
-  margin-top: var(--bt-mt, 0) !important;
-  margin-bottom: var(--bt-mb, 0) !important;
-}
+@layer bt {
+  [data-bt-only] {
+    font-size: 0 !important;
+    letter-spacing: 0 !important;
+    word-spacing: 0 !important;
+    margin-top: var(--bt-mt, 0) !important;
+    margin-bottom: var(--bt-mb, 0) !important;
+  }
 
-[data-bt-only] > [data-bt-hide] {
-  display: none !important;
-}
+  [data-bt-only] > [data-bt-hide] {
+    display: none !important;
+  }
 
-[data-bt-only] > :not(bt-tr[data-bt]):not([data-bt-only]):not([data-bt-hide]) {
-  font-size: var(--bt-fs, 1rem) !important;
-  line-height: var(--bt-lh, normal) !important;
-  letter-spacing: var(--bt-ls, normal) !important;
-  word-spacing: var(--bt-ws, normal) !important;
+  [data-bt-only] > :not(bt-tr[data-bt]):not([data-bt-only]):not([data-bt-hide]) {
+    font-size: var(--bt-fs, 1rem) !important;
+    line-height: var(--bt-lh, normal) !important;
+    letter-spacing: var(--bt-ls, normal) !important;
+    word-spacing: var(--bt-ws, normal) !important;
+  }
 }
 
 [data-bt-only] > bt-tr[data-bt] {
