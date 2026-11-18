@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test } from "vitest";
-import { collectUnits, contentRoots } from "../src/content/dom";
+import { collectUnits, contentRoots, isTranslatable } from "../src/content/dom";
 import { HIDE_ATTR, ONLY_ATTR, canHideOriginal, createWrapper, hideOriginals, insertAfter, showTranslation } from "../src/content/render";
 import { plainText } from "../src/content/serialize";
 
@@ -131,5 +131,15 @@ describe("web components that render their own text", () => {
 
   test("text a component shows through a slot is translated", () => {
     expect(shadowed('<p>opened <x-time style="display: inline">on Nov 18, 2026</x-time></p>', '<b><slot></slot></b>')).toEqual(["opened on Nov 18, 2026"]);
+  });
+});
+
+describe("bare addresses", () => {
+  test("domains and URLs without a scheme are not sent", () => {
+    expect(["rust-lang.org", "runtimewire.com", "stackoverflow.com/questions/11227809/why-is", "docs.python.org:443/3/"].filter(isTranslatable)).toEqual([]);
+  });
+
+  test("words and sentences with dots are", () => {
+    expect(["Read the docs.", "Hello world", "See e.g. this"].every(isTranslatable)).toBe(true);
   });
 });

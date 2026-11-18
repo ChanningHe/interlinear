@@ -27,6 +27,8 @@ const BLOCK_DESCENDANT =
 
 const MIN_LETTERS = 2;
 const URL_OR_EMAIL_RE = /^(?:(?:https?:\/\/|www\.)\S+|\S+@\S+\.\S+)$/i;
+/** "rust-lang.org", "example.com/questions/1/x": an address without a scheme. */
+const BARE_DOMAIN_RE = /^(?:[a-z0-9-]+\.)+[a-z]{2,}(?:[/:?#]\S*)?$/i;
 const LETTER_RE = /\p{L}/gu;
 /** u/name, r/name, @name, #tag: names, not language. ASCII only, so "#话题讨论" stays translatable. */
 const HANDLE_RE = /^(?:[ur]\/|[@#])[A-Za-z0-9_.-]+$/;
@@ -63,7 +65,7 @@ export function isTranslatable(text: string): boolean {
   if (text.length > MAX_TEXT_LENGTH) return false;
   const plain = plainText(text);
   if ((plain.match(LETTER_RE)?.length ?? 0) < MIN_LETTERS) return false;
-  return ![URL_OR_EMAIL_RE, HANDLE_RE, IDENTIFIER_RE, RELATIVE_TIME_RE].some((re) => re.test(plain));
+  return ![URL_OR_EMAIL_RE, BARE_DOMAIN_RE, HANDLE_RE, IDENTIFIER_RE, RELATIVE_TIME_RE].some((re) => re.test(plain));
 }
 
 /** False when every letter sits inside <time> ("17h ago"): metadata a reader does not need translated. */
