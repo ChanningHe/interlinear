@@ -119,7 +119,7 @@ async function ensureTranslator(): Promise<PageTranslator> {
   const c = await loadConfig();
   translator ??= createPageTranslator({
     config: { ...c, displayMode: pageMode ?? c.displayMode },
-    root: document.body,
+    root: () => document.body,
     translate: streamTexts,
     isTargetLanguage: createLanguageFilter(c.targetLang, chromeDetector, document.documentElement.lang),
     createVisibility: intersectionVisibility,

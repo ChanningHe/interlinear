@@ -159,7 +159,7 @@ function translator(html: string, overrides: Partial<PageConfig> = {}) {
   document.body.innerHTML = html;
   const t = createPageTranslator({
     config: { ...config, ...overrides },
-    root: document.body,
+    root: () => document.body,
     translate: model,
     isTargetLanguage: async () => false,
     createVisibility: alwaysVisible,

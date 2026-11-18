@@ -42,7 +42,8 @@ export interface PageTranslateOptions {
 
 export interface PageTranslatorDeps {
   readonly config: PageConfig;
-  readonly root: Element;
+  /** The element to translate, looked up each time: pages (Turbo, pjax) can replace <body>. */
+  readonly root: () => Element;
   readonly translate: (texts: readonly string[], opts: PageTranslateOptions) => Promise<TranslateResult[]>;
   readonly isTargetLanguage: (text: string) => Promise<boolean>;
   readonly createVisibility: (onVisible: (els: readonly Element[]) => void) => Visibility;
@@ -184,10 +185,10 @@ export function createPageTranslator(deps: PageTranslatorDeps) {
   const scopedOpts: CollectOptions = { skipChrome: deps.config.scope === "content" };
 
   function currentRoots(): readonly Element[] {
-    if (deps.config.scope === "page") return [deps.root];
+    if (deps.config.scope === "page") return [deps.root()];
     // Recomputed when a root is gone or hidden (SPAs that keep the old page around hidden).
     const stale = (r: Element) => !r.isConnected || getComputedStyle(r).display === "none";
-    if (scopeRoots.length === 0 || scopeRoots.some(stale)) scopeRoots = contentRoots(deps.root);
+    if (scopeRoots.length === 0 || scopeRoots.some(stale)) scopeRoots = contentRoots(deps.root());
     return scopeRoots;
   }
   let tracked = new WeakMap<Node, Tracked>();
@@ -209,6 +210,8 @@ export function createPageTranslator(deps: PageTranslatorDeps) {
   let mutationTimer: ReturnType<typeof setTimeout> | undefined;
   let visibility: Visibility | undefined;
   let mutations: MutationObserver | undefined;
+  /** The root the observer watches; differs from deps.root() once the page swapped it. */
+  let observedRoot: Element | undefined;
   let allowance = allowanceStep;
   let spent = 0;
   let paused: readonly Unit[] = [];
@@ -474,8 +477,10 @@ export function createPageTranslator(deps: PageTranslatorDeps) {
   }
 
   function onMutations(records: readonly MutationRecord[]): void {
+    if (deps.root() !== observedRoot) return onRootSwapped();
     const roots = new Set(pendingRoots);
     for (const r of records) {
+      if (r.target === observedRoot.parentNode) continue; // siblings of the root, e.g. <head>
       if (isInsideOwn(r.target)) continue;
       // A class flip on <body> or a page wrapper (scroll state, theme) would rescan everything.
       if (r.type === "attributes" && !isWithinScope(r.target)) continue;
@@ -522,25 +527,42 @@ export function createPageTranslator(deps: PageTranslatorDeps) {
       .forEach((r) => scan(r));
   }
 
-  function activate(): void {
-    if (active) return;
-    active = true;
-    session = new AbortController();
-    visibility = deps.createVisibility(onVisible);
-    mutations = new MutationObserver(onMutations);
-    mutations.observe(deps.root, {
+  /** Watches the root's subtree, and its parent's children so a replaced root is noticed. */
+  function observeRoot(): void {
+    const root = deps.root();
+    observedRoot = root;
+    mutations?.disconnect();
+    mutations?.observe(root, {
       childList: true,
       subtree: true,
       characterData: true,
       attributes: true,
       attributeFilter: OBSERVED_ATTRIBUTES,
     });
+    if (root.parentNode) mutations?.observe(root.parentNode, { childList: true });
+  }
+
+  /** The page put a new root in place: follow it and translate what it brought. */
+  function onRootSwapped(): void {
+    observeRoot();
+    scopeRoots = [];
+    pendingRoots = new Set();
+    if (wholePage) currentRoots().forEach((r) => scan(r));
+  }
+
+  function activate(): void {
+    if (active) return;
+    active = true;
+    session = new AbortController();
+    visibility = deps.createVisibility(onVisible);
+    mutations = new MutationObserver(onMutations);
+    observeRoot();
   }
 
   /** Applies the display mode to every finished translation; no new requests. */
   function setMode(next: DisplayMode): void {
     mode = next;
-    const done = [...deps.root.querySelectorAll<HTMLElement>(`bt-tr[${OWN_ATTR}].bt-done`)].map((w) => ({
+    const done = [...deps.root().querySelectorAll<HTMLElement>(`bt-tr[${OWN_ATTR}].bt-done`)].map((w) => ({
       w,
       unit: tracked.get(wrapperAnchor.get(w) ?? w)?.unit,
     }));
@@ -576,7 +598,7 @@ export function createPageTranslator(deps: PageTranslatorDeps) {
     },
     /** Translates the paragraphs of the block that contains `target` (hover translation). */
     translateRegion(target: Element): void {
-      if (!deps.root.contains(target) || isInsideOwn(target) || isInsideSkipped(target)) return;
+      if (!deps.root().contains(target) || isInsideOwn(target) || isInsideSkipped(target)) return;
       const region = blockAncestor(target);
       // Holding the key while moving over a paragraph fires for every element in it.
       if (!wholePage && regions.has(region)) return;
@@ -592,6 +614,7 @@ export function createPageTranslator(deps: PageTranslatorDeps) {
       regions = new Set();
       scopeRoots = [];
       mutations?.disconnect();
+      observedRoot = undefined;
       visibility?.disconnect();
       clearTimeout(queueTimer);
       clearTimeout(mutationTimer);
@@ -606,7 +629,7 @@ export function createPageTranslator(deps: PageTranslatorDeps) {
       tracked = new WeakMap();
       wrapperAnchor = new WeakMap();
       hostUnits = new WeakMap();
-      removeAllTranslations(deps.root);
+      removeAllTranslations(deps.root());
     },
   };
 }

@@ -35,7 +35,7 @@ function setup(html: string, overrides: Partial<Parameters<typeof createPageTran
   document.body.innerHTML = html;
   const t = createPageTranslator({
     config,
-    root: document.body,
+    root: () => document.body,
     translate: upper,
     isTargetLanguage: async () => false,
     createVisibility: alwaysVisible,
@@ -98,6 +98,18 @@ describe("page translator", () => {
 
     await new Promise((r) => setTimeout(r, 20));
     expect(upper).toHaveBeenCalledTimes(2);
+  });
+
+  test("keeps translating after the page replaces <body> (Turbo, pjax)", async () => {
+    const t = setup("<p>Old page text</p>");
+    t.start();
+    await vi.waitFor(() => expect(translations()).toEqual(["OLD PAGE TEXT"]));
+    const body = document.createElement("body");
+    body.innerHTML = "<p>New page text</p>";
+    document.body.replaceWith(body);
+    await vi.waitFor(() => expect(translations()).toEqual(["NEW PAGE TEXT"]));
+    body.insertAdjacentHTML("beforeend", "<p>Added after the swap</p>");
+    await vi.waitFor(() => expect(translations()).toEqual(["NEW PAGE TEXT", "ADDED AFTER THE SWAP"]));
   });
 
   test("re-translates a paragraph whose text changed", async () => {
