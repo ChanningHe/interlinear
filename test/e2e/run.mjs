@@ -342,12 +342,12 @@ try {
     await send({ type: "toggle-tab" });
     assert.equal(await layout.$("bt-tr, [data-bt-only]"), null);
 
-    // Tapping Alt over a card that a transparent link covers translates the text beneath it.
+    // Double-tapping Alt over a card that a transparent link covers translates the text beneath it.
     await layout.locator("#under").scrollIntoViewIfNeeded();
     const under = await layout.locator("#under").boundingBox();
     await layout.mouse.move(under.x + 20, under.y + under.height / 2);
-    await layout.keyboard.down("Alt");
-    await layout.keyboard.up("Alt");
+    await layout.keyboard.press("Alt");
+    await layout.keyboard.press("Alt");
     await layout.waitForSelector("#under bt-tr.bt-done", { timeout: 10_000 });
     // The selection button shows despite the rule that hides undefined custom elements.
     await layout.locator("#obj").scrollIntoViewIfNeeded();
@@ -426,12 +426,16 @@ try {
   }, helperUrl);
   await helper.bringToFront();
 
-  await step("tap Alt over a paragraph to translate just that paragraph", async () => {
+  await step("double-tap Alt over a paragraph to translate just that paragraph", async () => {
     assert.equal(await helper.$("bt-tr"), null);
     const box = await helper.locator("#p1").boundingBox();
     await helper.mouse.move(box.x + 20, box.y + box.height / 2);
-    await helper.keyboard.down("Alt");
-    await helper.keyboard.up("Alt");
+    // A single tap is what OS shortcuts (Alt+Tab…) look like to a page: it does nothing.
+    await helper.keyboard.press("Alt");
+    await helper.waitForTimeout(500);
+    assert.equal(await helper.$("bt-tr"), null);
+    await helper.keyboard.press("Alt");
+    await helper.keyboard.press("Alt");
     await helper.waitForSelector("#p1 bt-tr.bt-done", { timeout: 10_000 });
     assert.equal(await helper.$$eval("bt-tr", (els) => els.length), 1);
   });

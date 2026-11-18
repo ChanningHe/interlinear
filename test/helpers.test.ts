@@ -31,58 +31,76 @@ describe("hover translation", () => {
     document.dispatchEvent(up(k));
   };
 
-  test("tapping the modifier translates the hovered element", () => {
+  // A single tap is what OS and browser shortcuts look like to a page (Alt+Tab, Cmd+Tab, input
+  // switching, extension commands: the other key never reaches it), so only a double tap counts.
+  test("a double tap of the modifier translates the hovered element; a single tap does not", () => {
     document.body.innerHTML = "<p id='p'>Text</p>";
     const p = document.getElementById("p")!;
     const onTarget = vi.fn();
     disposers.push(installHover({ modifier: "ctrl", onTarget, getHovered: () => p, requireTrusted: false }));
     tap("Control", { ctrlKey: true });
-    tap("Alt", { altKey: true });
+    expect(onTarget).not.toHaveBeenCalled();
+    tap("Control", { ctrlKey: true });
     expect(onTarget).toHaveBeenCalledTimes(1);
     expect(onTarget).toHaveBeenCalledWith(p);
+    tap("Control", { ctrlKey: true }); // a third tap starts a new pair
+    expect(onTarget).toHaveBeenCalledTimes(1);
   });
 
-  test("the modifier used in a shortcut, a click or a zoom does not translate", () => {
+  test("taps further apart than the double-tap window are two single taps", () => {
     document.body.innerHTML = "<p id='p'>Text</p>";
     const onTarget = vi.fn();
-    disposers.push(installHover({ modifier: "ctrl", onTarget, getHovered: () => document.body, requireTrusted: false }));
+    let now = 0;
+    disposers.push(installHover({ modifier: "alt", onTarget, getHovered: () => document.body, requireTrusted: false, now: () => now }));
+    tap("Alt", { altKey: true });
+    now = 400;
+    tap("Alt", { altKey: true });
+    expect(onTarget).not.toHaveBeenCalled();
+    now = 600;
+    tap("Alt", { altKey: true });
+    expect(onTarget).toHaveBeenCalledTimes(1);
+  });
+
+  test("a key, a click, a scroll or a shortcut command in between starts over", () => {
+    document.body.innerHTML = "<p id='p'>Text</p>";
+    const onTarget = vi.fn();
+    const hover = installHover({ modifier: "ctrl", onTarget, getHovered: () => document.body, requireTrusted: false });
+    disposers.push(hover);
     for (const interrupt of [
-      () => document.dispatchEvent(key("c", { ctrlKey: true })),
-      () => document.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, ctrlKey: true })),
-      () => document.dispatchEvent(new WheelEvent("wheel", { bubbles: true, ctrlKey: true })),
+      () => tap("c"),
+      () => document.dispatchEvent(new MouseEvent("mousedown", { bubbles: true })),
+      () => document.dispatchEvent(new WheelEvent("wheel", { bubbles: true })),
+      () => hover.cancelTap(), // an extension command arrived (its key never reaches the page)
     ]) {
-      document.dispatchEvent(key("Control", { ctrlKey: true }));
+      tap("Control", { ctrlKey: true });
       interrupt();
-      document.dispatchEvent(up("Control"));
+      tap("Control", { ctrlKey: true });
+      hover.cancelTap(); // clear any pending single tap before the next case
     }
+    // The modifier used as part of a chord is not a tap at all.
+    document.dispatchEvent(key("Control", { ctrlKey: true }));
+    document.dispatchEvent(key("c", { ctrlKey: true }));
+    document.dispatchEvent(up("Control"));
+    tap("Control", { ctrlKey: true });
     expect(onTarget).not.toHaveBeenCalled();
   });
 
-  test("moving over paragraphs while holding the key translates each", () => {
+  test("holding the second press and moving over paragraphs translates each", () => {
     document.body.innerHTML = "<p id='a'>A</p><p id='b'>B</p>";
     const onTarget = vi.fn();
     disposers.push(installHover({ modifier: "alt", onTarget, getHovered: () => undefined, requireTrusted: false }));
-    document.getElementById("a")!.dispatchEvent(new MouseEvent("mouseover", { bubbles: true, altKey: true }));
-    document.dispatchEvent(key("Alt", { altKey: true }));
-    document.getElementById("a")!.dispatchEvent(new MouseEvent("mouseover", { bubbles: true, altKey: true }));
-    document.getElementById("b")!.dispatchEvent(new MouseEvent("mouseover", { bubbles: true }));
+    const over = (id: string, altKey = true) => document.getElementById(id)!.dispatchEvent(new MouseEvent("mouseover", { bubbles: true, altKey }));
+    document.dispatchEvent(key("Alt", { altKey: true })); // a first press held down is not enough
+    over("a");
+    document.dispatchEvent(up("Alt"));
+    expect(onTarget).not.toHaveBeenCalled();
+    document.dispatchEvent(key("Alt", { altKey: true })); // second press, held
+    over("a");
+    over("b", false); // the key was released meanwhile
     expect(onTarget.mock.calls.map(([el]) => el.id)).toEqual(["a"]);
   });
 
-  test("Alt held for a browser shortcut (Alt+Q) is not a tap: the page never sees the Q", () => {
-    document.body.innerHTML = "<p id='p'>Text</p>";
-    const onTarget = vi.fn();
-    const hover = installHover({ modifier: "alt", onTarget, getHovered: () => document.body, requireTrusted: false });
-    disposers.push(hover);
-    document.dispatchEvent(key("Alt", { altKey: true }));
-    hover.cancelTap(); // the shortcut's command reached the page while Alt was down
-    document.dispatchEvent(up("Alt"));
-    expect(onTarget).not.toHaveBeenCalled();
-    tap("Alt", { altKey: true });
-    expect(onTarget).toHaveBeenCalledTimes(1);
-  });
-
-  test("a tap of Alt that translates keeps the browser from focusing its menu", () => {
+  test("only the tap that translates keeps the browser from focusing its menu", () => {
     document.body.innerHTML = "<p id='p'>Text</p>";
     let hovered: Element | undefined = document.body;
     disposers.push(installHover({ modifier: "alt", onTarget: () => {}, getHovered: () => hovered, requireTrusted: false }));
@@ -92,8 +110,10 @@ describe("hover translation", () => {
       document.dispatchEvent(e);
       return e.defaultPrevented;
     };
+    expect(release()).toBe(false); // a first tap keeps Alt's usual meaning
     expect(release()).toBe(true);
-    hovered = undefined; // nothing under the pointer: Alt keeps its usual meaning
+    hovered = undefined; // nothing under the pointer
+    release();
     expect(release()).toBe(false);
   });
 

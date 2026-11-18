@@ -9,7 +9,7 @@ A bilingual web page translator for Chrome and Firefox that sends text only to t
 - Bilingual or translation-only view. Translations appear under each paragraph and keep links and inline formatting.
 - Translates the main content and leaves navigation, ads, tooltips, usernames and timestamps alone.
 - Translates as you scroll, picks up content that loads later, and restores the original page exactly.
-- Translate one paragraph (tap Alt, or Option on a Mac, over it), selected text, or what you typed in a text field (press Space three times).
+- Translate one paragraph (double-tap Alt, or Option on a Mac, over it), selected text, or what you typed in a text field (press Space three times).
 - Works with OpenRouter, OpenAI, Anthropic, Gemini, DeepSeek, Ollama, LM Studio and any OpenAI- or Anthropic-compatible endpoint, or sign in with ChatGPT to use your plan.
 - Per-service settings tuned for translation, such as reasoning effort and OpenRouter provider preferences.
 - Glossary, custom instructions, 13 translation styles and sites that are always translated.

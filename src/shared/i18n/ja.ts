@@ -109,7 +109,7 @@ export const ja: Messages = {
   inputTranslation: "入力欄の翻訳",
   inputTranslationDesc: "入力欄でスペースを 3 回押すと、入力した文章を翻訳します。",
   everywhere: "すべてのサイトで有効にする",
-  hoverParagraphDesc: "段落にポインタを合わせてこのキーを軽く押すか、押したまま段落の上を動かします。ショートカット {shortcut} でも同じです。",
+  hoverParagraphDesc: "段落にポインタを合わせてこのキーを素早く 2 回押します。2 回目を押したまま動かすと、通った段落も翻訳します。ショートカット {shortcut} でも同じです。",
   helpersNeedAccess: "以下の機能は、すべてのサイトで有効にしてから使えます。",
   helpersAccessDesc: "すべてのサイトへのアクセス許可が必要です。テキストを送るのは、これらの機能を使ったときだけです。",
   enabledEverywhere: "すべてのサイトで有効です",

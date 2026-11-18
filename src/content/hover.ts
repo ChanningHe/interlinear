@@ -1,8 +1,12 @@
 import type { HoverModifier } from "../core/settings";
 
-// Hover translation: tap the modifier key while the mouse is over a paragraph, or hold it and
-// move onto paragraphs. A key used as part of a shortcut (Ctrl+C, Ctrl+click, Ctrl+wheel zoom)
-// never triggers a translation: only a "clean" press with nothing else in between counts.
+// Hover translation: double-tap the modifier key while the mouse is over a paragraph, or hold the
+// second press and move onto paragraphs. A single tap never counts: OS and browser shortcuts
+// (Alt+Tab, Cmd+Tab, input switching, extension commands) look exactly like one to a page, since
+// their other key never reaches it. Only "clean" presses count: nothing else may happen in between.
+
+/** The second tap must start within this long after the first one ends. */
+const DOUBLE_TAP_MS = 300;
 
 const KEY_NAMES: Readonly<Record<Exclude<HoverModifier, "off">, string>> = {
   ctrl: "Control",
@@ -100,12 +104,14 @@ export interface HoverDeps {
   readonly getHovered?: () => Element | undefined;
   /** Tests cannot produce trusted events; production always requires them. */
   readonly requireTrusted?: boolean;
+  /** Clock in milliseconds; injectable for tests. */
+  readonly now?: () => number;
 }
 
 /**
- * Disposes the listeners. `cancelTap` ends the current press without translating: a browser
- * shortcut on the same modifier (Alt+Q) hides its letter from the page, so the page alone would
- * see Alt pressed and released, which is a tap.
+ * Disposes the listeners. `cancelTap` forgets the current press and a first tap waiting for its
+ * second: a browser shortcut on the same modifier (Alt+Q) hides its letter from the page, so the
+ * page alone would see Alt pressed and released, which is a tap.
  */
 export type HoverHandle = (() => void) & { readonly cancelTap: () => void };
 
@@ -118,29 +124,38 @@ export function installHover(deps: HoverDeps): HoverHandle {
   const requireTrusted = deps.requireTrusted ?? true;
   const trusted = (e: Event) => e.isTrusted || !requireTrusted;
   const isModifier = (e: KeyboardEvent) => e.key === KEY_NAMES[modifier];
+  const now = deps.now ?? (() => performance.now());
   /** The modifier is down and has not been combined with anything else yet. */
   let clean = false;
+  /** The press now down began right after a clean tap: it is the second of a double tap. */
+  let second = false;
+  /** When the last clean single tap ended, while it may still become the first of a pair. */
+  let lastTap: number | undefined;
 
   const onKeyDown = (e: KeyboardEvent) => {
     if (!trusted(e) || e.repeat) return;
-    clean = isModifier(e) && onlyModifier(e, modifier);
+    if (!isModifier(e) || !onlyModifier(e, modifier)) return breakChord(); // any other key
+    clean = true;
+    second = lastTap !== undefined && now() - lastTap <= DOUBLE_TAP_MS;
   };
   const onKeyUp = (e: KeyboardEvent) => {
     if (!trusted(e) || !isModifier(e)) return;
-    const tapped = clean;
-    clean = false;
-    const el = tapped ? getHovered() : undefined;
+    const [tapped, wasSecond] = [clean, second];
+    clean = second = false;
+    lastTap = tapped && !wasSecond ? now() : undefined;
+    const el = tapped && wasSecond ? getHovered() : undefined;
     if (!el) return;
     // A lone Alt also focuses the browser's menu (Windows) or shows Firefox's menu bar.
     e.preventDefault();
     deps.onTarget(el);
   };
   const breakChord = () => {
-    clean = false;
+    clean = second = false;
+    lastTap = undefined;
   };
-  // Moving onto another paragraph while holding the key translates that one too.
+  // Moving onto another paragraph while holding the second press translates that one too.
   const onMouseOver = (e: MouseEvent) => {
-    if (!clean || !trusted(e) || !onlyModifier(e, modifier) || !(e.target instanceof Element)) return;
+    if (!clean || !second || !trusted(e) || !onlyModifier(e, modifier) || !(e.target instanceof Element)) return;
     deps.onTarget(textElementAt(e.clientX, e.clientY, doc) ?? e.target);
   };
   const listeners: [string, EventListener][] = [

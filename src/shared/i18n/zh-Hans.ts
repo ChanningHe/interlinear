@@ -109,7 +109,7 @@ export const zhHans: Messages = {
   inputTranslation: "输入框翻译",
   inputTranslationDesc: "在输入框中连按三次空格，翻译你输入的内容。",
   everywhere: "在所有网站启用",
-  hoverParagraphDesc: "鼠标指向段落时轻按此键，或按住并划过多个段落。也可以按快捷键 {shortcut}。",
+  hoverParagraphDesc: "鼠标指向段落时快速连按两次此键；第二次按住不放并移动鼠标，可以翻译经过的多个段落。也可以按快捷键 {shortcut}。",
   helpersNeedAccess: "以下功能需要在所有网站启用后才能使用。",
   helpersAccessDesc: "需要访问所有网站的权限；仍然只在你使用这些功能时才发送文本。",
   enabledEverywhere: "已在所有网站启用",

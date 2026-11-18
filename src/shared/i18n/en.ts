@@ -118,7 +118,7 @@ export const en = {
   inputTranslation: "Input box translation",
   inputTranslationDesc: "Press Space three times in a text field to translate what you typed.",
   everywhere: "Enable on every website",
-  hoverParagraphDesc: "Tap the key with the pointer over a paragraph, or hold it and move across paragraphs. The {shortcut} shortcut does the same.",
+  hoverParagraphDesc: "Double-tap the key with the pointer over a paragraph; hold the second press and move to translate more. The {shortcut} shortcut does the same.",
   helpersNeedAccess: "These work only after you enable them on every website.",
   helpersAccessDesc: "Needs access to all websites. Text is still sent only when you use one of them.",
   enabledEverywhere: "Enabled on every website",
