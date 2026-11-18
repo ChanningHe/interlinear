@@ -75,6 +75,8 @@ export type BackgroundRequest =
 export type ContentRequest =
   | { readonly type: "toggle" }
   | { readonly type: "state" }
+  /** Settings changed: re-read the page config and reinstall the helpers. */
+  | { readonly type: "config-changed" }
   | { readonly type: "set-mode"; readonly mode: DisplayMode }
   | { readonly type: "translate-hovered" }
   | { readonly type: "translate-selection"; readonly text: string };

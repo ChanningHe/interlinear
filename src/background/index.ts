@@ -61,6 +61,7 @@ chrome.storage.onChanged.addListener((changes, area) => {
   settings = undefined;
   syncContentScripts();
   void createMenus(); // titles follow the interface language
+  void notifyTabs();
 });
 
 const uiLanguage = (s: Settings) => resolveUiLanguage(s.uiLanguage, chrome.i18n.getUILanguage());
@@ -213,6 +214,13 @@ async function ensureInjected(tabId: number): Promise<void> {
 
 function sendToTab<T>(tabId: number, msg: ContentRequest): Promise<T> {
   return chrome.tabs.sendMessage<ContentRequest, T>(tabId, msg);
+}
+
+/** Content scripts cannot read storage, so open tabs are told to re-read their config; tabs without one ignore it. */
+async function notifyTabs(): Promise<void> {
+  const tabs = await chrome.tabs.query({});
+  const msg: ContentRequest = { type: "config-changed" };
+  await Promise.allSettled(tabs.flatMap((t) => (t.id === undefined ? [] : [sendToTab(t.id, msg)])));
 }
 
 async function toggleTab(tabId: number): Promise<TabState> {

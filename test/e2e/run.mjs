@@ -513,6 +513,54 @@ try {
     assert.ok(await helper.$("bt-popover"));
   });
 
+  await step("toggle after translating one paragraph translates the whole page, a second toggle clears it", async () => {
+    const tabMessage = (message) =>
+      options.evaluate(async ([url, msg]) => {
+        const [tab] = await chrome.tabs.query({ url });
+        return chrome.runtime.sendMessage({ ...msg, tabId: tab.id });
+      }, [helperUrl, message]);
+    // Only #p1 is translated (double tap above): the toolbar still offers "Translate page".
+    assert.equal((await tabMessage({ type: "tab-state" })).active, false);
+    assert.equal((await tabMessage({ type: "toggle-tab" })).active, true);
+    await helper.waitForSelector("li bt-tr.bt-done", { timeout: 10_000 });
+    assert.equal(await helper.$$eval("#p1 bt-tr", (els) => els.length), 1);
+    assert.equal((await tabMessage({ type: "toggle-tab" })).active, false);
+    assert.equal(await helper.$("bt-tr"), null);
+  });
+
+  await step("changed helper settings apply to open tabs without a reload", async () => {
+    const setHelpers = (patch) =>
+      worker.evaluate(async (p) => {
+        const { settings } = await chrome.storage.local.get("settings");
+        await chrome.storage.local.set({ settings: { ...settings, ...p } });
+      }, patch);
+    await setHelpers({ hoverModifier: "off", inputTranslation: false });
+    await helper.waitForTimeout(500);
+    const box = await helper.locator("#p1").boundingBox();
+    await helper.mouse.move(box.x + 20, box.y + box.height / 2);
+    await helper.keyboard.press("Alt");
+    await helper.keyboard.press("Alt");
+    await helper.fill("#f input", "typed text");
+    await helper.keyboard.press("Space");
+    await helper.keyboard.press("Space");
+    await helper.keyboard.press("Space");
+    await helper.waitForTimeout(500);
+    assert.equal(await helper.$("bt-tr"), null);
+    assert.equal(await helper.$eval("#f input", (el) => el.value), "typed text   ");
+    // Turned back on, the same tab reacts again.
+    await setHelpers({ hoverModifier: "alt", inputTranslation: true });
+    await helper.waitForTimeout(500);
+    await helper.keyboard.press("Alt");
+    await helper.keyboard.press("Alt");
+    await helper.waitForSelector("#p1 bt-tr.bt-done", { timeout: 10_000 });
+    assert.equal(await helper.$$eval("bt-tr", (els) => els.length), 1);
+    await options.evaluate(async (url) => {
+      const [tab] = await chrome.tabs.query({ url });
+      await chrome.runtime.sendMessage({ type: "toggle-tab", tabId: tab.id });
+      await chrome.runtime.sendMessage({ type: "toggle-tab", tabId: tab.id });
+    }, helperUrl);
+  });
+
   await step("always-translate sites are translated on load", async () => {
     const origin = new URL(pageUrl).origin;
     await worker.evaluate(async (origin) => {

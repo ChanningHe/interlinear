@@ -38,6 +38,8 @@ let config: PageConfig | undefined;
 let pageMode: DisplayMode | undefined;
 let popover: Popover | undefined;
 let hover: HoverHandle | undefined;
+/** Removes the installed hover, selection and input helpers. */
+let removeHelpers: (() => void) | undefined;
 /** Finds the paragraph under the mouse for the hover key and the shortcut, beneath overlays. */
 const pointer = trackPointer();
 
@@ -197,11 +199,19 @@ async function translateInput(field: Field, c: PageConfig): Promise<void> {
 
 /** Hover, selection and input helpers. They only ever act on real (trusted) user input. */
 function installHelpers(c: PageConfig): void {
+  removeHelpers?.();
   hover = installHover({ modifier: c.hoverModifier, onTarget: (el) => void translateHovered(el), getHovered: pointer.target });
+  const removals: (() => void)[] = [hover];
   if (c.selectionButton) {
-    installSelectionButton({ popover: getPopover(c), onTranslate: (text, anchor) => void translateSelection(text, anchor) });
+    removals.push(installSelectionButton({ popover: getPopover(c), onTranslate: (text, anchor) => void translateSelection(text, anchor) }));
   }
-  if (c.inputTranslation) installTripleSpace({ onTrigger: (field) => void translateInput(field, c) });
+  if (c.inputTranslation) removals.push(installTripleSpace({ onTrigger: (field) => void translateInput(field, c) }));
+  removeHelpers = () => removals.forEach((remove) => remove());
+}
+
+/** Applies changed settings to the helpers; a running page translation keeps the settings it started with. */
+async function reinstallHelpers(): Promise<void> {
+  installHelpers(await loadConfig());
 }
 
 /** Requests that would insert into the page; refused up front where the page cannot hold them. */
@@ -215,6 +225,8 @@ function onMessage(msg: ContentRequest): Promise<TabState> | TabState | undefine
   switch (msg?.type) {
     case "state":
       return state();
+    case "config-changed":
+      return reinstallHelpers().then(state);
     case "toggle":
       return toggle();
     case "set-mode":
