@@ -15,6 +15,10 @@ package:
     npm run build
     scripts/package.sh
 
+# Write the icon as files for store listings (into store/assets)
+store-icons:
+    node scripts/store-icons.mjs
+
 # Set the version everywhere, check, commit and tag it: just release 1.2.3
 release version: (_release-guard version)
     npm version "{{version}}" --no-git-tag-version --allow-same-version
