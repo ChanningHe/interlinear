@@ -502,6 +502,30 @@ try {
     assert.equal(await helper.$eval("bt-popover", (el) => el.shadowRoot), null, "closed shadow root");
   });
 
+  await step("the translate button is above and clickable inside a modal dialog", async () => {
+    await helper.evaluate(() => {
+      const dialog = document.createElement("dialog");
+      dialog.id = "modal";
+      dialog.innerHTML = "<p id='in-modal'>Text inside a modal dialog to select now.</p>";
+      document.body.append(dialog);
+      dialog.showModal();
+    });
+    const box = await helper.locator("#in-modal").boundingBox();
+    await helper.mouse.move(box.x + 2, box.y + box.height / 2);
+    await helper.mouse.down();
+    await helper.mouse.move(box.x + 100, box.y + box.height / 2, { steps: 5 });
+    await helper.mouse.up();
+    await helper.waitForSelector("#modal bt-popover", { state: "attached", timeout: 5_000 });
+    // The button sits just below the selected text; whatever the browser hit-tests there must be it.
+    const hit = await helper.evaluate(() => {
+      const r = getSelection().getRangeAt(0).getClientRects()[0];
+      return document.elementFromPoint(r.left + 15, r.bottom + 8 + 15)?.tagName;
+    });
+    assert.equal(hit, "BT-POPOVER");
+    await helper.keyboard.press("Escape");
+    await helper.evaluate(() => document.getElementById("modal").remove());
+  });
+
   await step("context menu selection translation shows a result popover", async () => {
     const before = requests.length;
     await options.evaluate(async (url) => {

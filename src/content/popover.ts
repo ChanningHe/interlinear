@@ -57,8 +57,13 @@ button:focus-visible { outline: 2px solid #2563eb; outline-offset: 1px; }
 export function place(anchor: DOMRect, width: number, height: number, view: { width: number; height: number }) {
   const left = Math.max(MARGIN, Math.min(anchor.left, view.width - width - MARGIN));
   const below = anchor.bottom + MARGIN;
-  const top = below + height <= view.height - MARGIN ? below : Math.max(MARGIN, anchor.top - height - MARGIN);
-  return { left, top };
+  const top = below + height <= view.height - MARGIN ? below : anchor.top - height - MARGIN;
+  // An anchor scrolled out of view (a selection taller than the screen) still gets a visible box.
+  return { left, top: Math.max(MARGIN, Math.min(top, view.height - height - MARGIN)) };
+}
+
+function openModalDialog(doc: Document): Element | undefined {
+  return [...doc.querySelectorAll("dialog[open]")].filter((d) => d.matches(":modal")).pop();
 }
 
 function button(label: string, onClick: () => void, trusted: boolean, cls?: string): HTMLButtonElement {
@@ -118,6 +123,8 @@ export function createPopover(labels: ContentLabels, opts: PopoverOptions = {}):
   const host = doc.createElement("bt-popover");
   host.setAttribute(OWN_ATTR, "");
   host.setAttribute("translate", "no");
+  // A manual popover lives in the top layer, above modal dialogs that no z-index can beat.
+  host.setAttribute("popover", "manual");
   const shadow = host.attachShadow({ mode: opts.shadowMode ?? "closed" });
   const style = doc.createElement("style");
   style.textContent = CSS;
@@ -128,7 +135,10 @@ export function createPopover(labels: ContentLabels, opts: PopoverOptions = {}):
   let showingResult = false;
 
   const mount = (anchor: DOMRect, nodes: Node[]) => {
-    if (!host.isConnected) doc.documentElement.append(host);
+    // A modal dialog makes everything outside it inert, so the host has to live inside the open one.
+    const parent = openModalDialog(doc) ?? doc.documentElement;
+    if (host.parentElement !== parent) parent.append(host); // moving closes a shown popover
+    if (host.showPopover && !host.matches(":popover-open")) host.showPopover();
     box.replaceChildren(...nodes);
     const rect = box.getBoundingClientRect();
     const view = { width: doc.documentElement.clientWidth || innerWidth, height: innerHeight };
@@ -150,8 +160,13 @@ export function createPopover(labels: ContentLabels, opts: PopoverOptions = {}):
   const onKeyDown = (e: KeyboardEvent) => {
     if (e.key === "Escape" && host.isConnected) hide();
   };
+  // The button points at selected text; once the page moves it points at nothing.
+  const onScroll = () => {
+    if (!showingResult) hide();
+  };
   doc.addEventListener("mousedown", onPointerDown, true);
   doc.addEventListener("keydown", onKeyDown, true);
+  doc.addEventListener("scroll", onScroll, { capture: true, passive: true });
 
   return {
     showButton(anchor, onClick) {
@@ -177,6 +192,7 @@ export function createPopover(labels: ContentLabels, opts: PopoverOptions = {}):
       hide();
       doc.removeEventListener("mousedown", onPointerDown, true);
       doc.removeEventListener("keydown", onKeyDown, true);
+      doc.removeEventListener("scroll", onScroll, true);
     },
   };
 }
