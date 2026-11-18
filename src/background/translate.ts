@@ -51,6 +51,7 @@ const NO_PROVIDER: Failure = { error: "No translation service configured. Open t
 const EMPTY: Failure = { error: "Model returned an empty translation", code: "errEmpty" };
 
 const ok = (text: string): TranslateResult => ({ ok: true, text });
+const fromCache = (text: string): TranslateResult => ({ ok: true, text, cached: true });
 const fail = (f: Failure): TranslateResult => ({ ok: false, ...f });
 
 /**
@@ -207,7 +208,7 @@ export function createTranslator(deps: TranslatorDeps) {
       maxItems: s.maxItemsPerBatch,
     });
 
-    cached.forEach((hit, i) => hit !== undefined && opts.onResult?.(i, ok(hit)));
+    cached.forEach((hit, i) => hit !== undefined && opts.onResult?.(i, fromCache(hit)));
     const fresh = new Map<number, TranslateResult>();
     const report = (i: number, r: TranslateResult) => {
       fresh.set(i, r);
@@ -220,7 +221,7 @@ export function createTranslator(deps: TranslatorDeps) {
 
     return texts.map((_, i) => {
       const hit = cached[i];
-      return hit === undefined ? fresh.get(i)! : ok(hit);
+      return hit === undefined ? fresh.get(i)! : fromCache(hit);
     });
   }
 

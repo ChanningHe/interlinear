@@ -474,6 +474,8 @@ export function createPageTranslator(deps: PageTranslatorDeps) {
     const showOnce = (i: number, r: TranslateResult) => {
       if (shown.has(i) || !batch[i]) return;
       shown.add(i);
+      // The allowance limits what the service is asked for; a cache hit cost nothing.
+      if (r.ok && r.cached) spent -= batch[i].text.length;
       show(batch[i], r);
     };
     try {

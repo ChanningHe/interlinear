@@ -164,6 +164,20 @@ describe("page translator", () => {
     await vi.waitFor(() => expect(translations()).toHaveLength(2));
   });
 
+  test("text served from the cache does not count against the allowance", async () => {
+    const translate = vi.fn(async (texts: readonly string[], opts: { onResult: (i: number, r: TranslateResult) => void }) => {
+      const results = texts.map((t) => ({ ok: true as const, text: t.toUpperCase(), cached: true as const }));
+      results.forEach((r, i) => opts.onResult(i, r));
+      return results;
+    });
+    const t = setup("<p>First paragraph text</p>", { charAllowance: 25, translate });
+    t.start();
+    await vi.waitFor(() => expect(translations()).toEqual(["FIRST PARAGRAPH TEXT"]));
+    document.body.insertAdjacentHTML("beforeend", "<p>Second paragraph text</p>");
+    await vi.waitFor(() => expect(translations()).toEqual(["FIRST PARAGRAPH TEXT", "SECOND PARAGRAPH TEXT"]));
+    expect(document.querySelector("bt-tr.bt-paused")).toBeNull();
+  });
+
   test("ignores synthetic clicks on retry when trusted clicks are required", async () => {
     const translate = vi.fn().mockResolvedValue([{ ok: false, error: "HTTP 500" }]);
     const t = setup("<p>Flaky paragraph</p>", { translate, requireTrustedClick: true });

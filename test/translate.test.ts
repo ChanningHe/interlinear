@@ -52,7 +52,11 @@ describe("translator", () => {
     expect(complete).toHaveBeenCalledTimes(1);
     expect(cache.store.size).toBe(2);
 
-    await t.translate(["two", "one"]);
+    // Marked as cached, so pages do not count them against what they may spend.
+    expect(await t.translate(["two", "one"])).toEqual([
+      { ok: true, text: "TWO", cached: true },
+      { ok: true, text: "ONE", cached: true },
+    ]);
     expect(complete).toHaveBeenCalledTimes(1);
   });
 

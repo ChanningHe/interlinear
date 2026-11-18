@@ -4,7 +4,8 @@ import { ERROR_CODES, type ContentLabels, type ErrorCode } from "./i18n";
 import { isKnownLanguage } from "./languages";
 
 export type TranslateResult =
-  | { readonly ok: true; readonly text: string }
+  /** `cached`: served from the local cache, so no service request was made for it. */
+  | { readonly ok: true; readonly text: string; readonly cached?: true }
   /** `error` is English (logs, and the fallback); pages show `code` in the interface language. */
   | { readonly ok: false; readonly error: string; readonly code?: ErrorCode; readonly status?: number };
 
