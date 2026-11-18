@@ -250,3 +250,88 @@ describe("retry policy", () => {
     expect(fetchFn).toHaveBeenCalledTimes(3);
   });
 });
+
+/** A fetch that never answers until its signal aborts. */
+const hangingFetch = () =>
+  vi.fn((_url: string, init: RequestInit) => new Promise<Response>((_, reject) => init.signal!.addEventListener("abort", () => reject(init.signal!.reason))));
+
+/** A fetch whose event stream sends each part after `gapMs`, then ends (or stalls when `stall`); aborting errors it, as real fetch does. */
+function slowFetch(parts: readonly string[], gapMs: number, stall = false) {
+  return vi.fn(async (_url: string, init: RequestInit) => {
+    const enc = new TextEncoder();
+    let i = 0;
+    const body = new ReadableStream<Uint8Array>({
+      start: (c) => init.signal!.addEventListener("abort", () => c.error(init.signal!.reason)),
+      pull: (c) =>
+        new Promise<void>((resolve) => {
+          if (i >= parts.length && stall) return; // never resolves: the server went quiet
+          setTimeout(() => {
+            try {
+              if (i < parts.length) c.enqueue(enc.encode(parts[i++]!));
+              else c.close();
+            } catch {
+              // The reader already cancelled the stream.
+            }
+            resolve();
+          }, gapMs);
+        }),
+    });
+    return new Response(body, { headers: { "content-type": "text/event-stream" } });
+  });
+}
+
+describe("timeouts", () => {
+  afterEach(() => vi.useRealTimers());
+  const delta = (t: string) => `data: ${JSON.stringify({ choices: [{ delta: { content: t } }] })}\n\n`;
+
+  test("a service that never answers fails once, as no result, not as a network error", async () => {
+    vi.useFakeTimers();
+    const fetchFn = hangingFetch();
+    vi.stubGlobal("fetch", fetchFn);
+    const result = complete(openai, req, noSleep).catch((e: unknown) => e);
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    expect(await result).toMatchObject({ code: "errNoResult", retryable: false });
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+  });
+
+  test("a stream that goes quiet mid-reply times out", async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal("fetch", slowFetch([delta("a")], 10, true));
+    const result = complete(openai, req, noSleep).catch((e: unknown) => e);
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    expect(await result).toMatchObject({ code: "errNoResult" });
+  });
+
+  test("a slow stream that keeps producing is never cut", async () => {
+    vi.useFakeTimers();
+    const parts = [...Array.from({ length: 10 }, () => delta("x")), "data: [DONE]\n\n"];
+    vi.stubGlobal("fetch", slowFetch(parts, 30_000));
+    const result = complete(openai, req, noSleep);
+    await vi.advanceTimersByTimeAsync(10 * 60_000);
+    await expect(result).resolves.toBe("x".repeat(10));
+  });
+});
+
+describe("backoff", () => {
+  test("stopping during a Retry-After wait ends the request at once", async () => {
+    const controller = new AbortController();
+    const fetchFn = mockFetch(json({}, 429, { "retry-after": "30" }));
+    setTimeout(() => controller.abort(), 20);
+    const started = Date.now();
+    await expect(complete(openai, req, { signal: controller.signal })).rejects.toMatchObject({ retryable: false });
+    expect(Date.now() - started).toBeLessThan(1000);
+    expect(fetchFn).toHaveBeenCalledTimes(1);
+  });
+
+  test("Retry-After as an HTTP date is honoured and capped", async () => {
+    const sleep = vi.fn(async (_ms: number) => {});
+    const ok = json({ choices: [{ message: { content: "ok" } }] });
+    const at = (ms: number) => new Date(Date.now() + ms).toUTCString();
+    mockFetch(json({}, 429, { "retry-after": at(5000) }), json({}, 503, { "retry-after": at(3_600_000) }), ok);
+    await expect(complete(openai, req, { sleep })).resolves.toBe("ok");
+    const [first, second] = sleep.mock.calls.map(([ms]) => ms);
+    expect(first).toBeGreaterThan(3000);
+    expect(first).toBeLessThanOrEqual(5000);
+    expect(second).toBe(30_000);
+  });
+});

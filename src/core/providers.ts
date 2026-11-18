@@ -9,8 +9,8 @@ export interface ChatRequest {
 
 export interface CompleteOptions {
   readonly signal?: AbortSignal;
-  /** Injectable for tests. */
-  readonly sleep?: (ms: number) => Promise<void>;
+  /** Injectable for tests; must resolve early when `signal` aborts. */
+  readonly sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
   /** Current access token for sign-in services (ChatGPT); refreshed by the caller. */
   readonly accessToken?: () => Promise<string>;
   /** Called with the reply received so far whenever a streamed reply grows. */
@@ -45,7 +45,10 @@ export class ProviderError extends Error {
 const MAX_ATTEMPTS = 3;
 const BASE_BACKOFF_MS = 1000;
 const MAX_BACKOFF_MS = 30_000;
-const REQUEST_TIMEOUT_MS = 90_000;
+/** Until the response headers arrive (servers that ignore streaming send them with the whole reply). */
+const RESPONSE_TIMEOUT_MS = 90_000;
+/** Between two chunks of the body; a stream that keeps producing has no total limit. */
+const IDLE_TIMEOUT_MS = 60_000;
 const ANTHROPIC_MAX_TOKENS = 16_000;
 
 interface WireRequest {
@@ -302,10 +305,43 @@ async function readBody(res: Response, wire: Wire, onText?: (text: string) => vo
   return wire.parse(data);
 }
 
+/** Retry-After as delay seconds or an HTTP date, capped at MAX_BACKOFF_MS. */
 function retryAfterMs(res: Response): number | undefined {
-  const seconds = Number(res.headers.get("retry-after"));
-  return Number.isFinite(seconds) && seconds > 0 ? Math.min(seconds * 1000, MAX_BACKOFF_MS) : undefined;
+  const value = res.headers.get("retry-after")?.trim();
+  if (!value) return undefined;
+  const seconds = Number(value);
+  const ms = Number.isFinite(seconds) ? seconds * 1000 : Date.parse(value) - Date.now();
+  return ms > 0 ? Math.min(ms, MAX_BACKOFF_MS) : undefined;
 }
+
+/** An abort signal that fires when the timer, re-armed on every sign of progress, runs out. */
+function watchdog() {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const arm = (ms: number) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => controller.abort(new DOMException("No progress in time", "TimeoutError")), ms);
+  };
+  return { signal: controller.signal, arm, stop: () => clearTimeout(timer) };
+}
+
+/** The same response, with the watchdog re-armed whenever a body chunk arrives. */
+function guarded(res: Response, arm: (ms: number) => void): Response {
+  if (!res.body) return res;
+  const body = res.body.pipeThrough(
+    new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, out) {
+        arm(IDLE_TIMEOUT_MS);
+        out.enqueue(chunk);
+      },
+    }),
+  );
+  return new Response(body, { status: res.status, statusText: res.statusText, headers: res.headers });
+}
+
+// Not retried: a service that went quiet for this long is unlikely to answer the same request sooner.
+const timedOut = () => new ProviderError("The service did not respond in time", false, { code: "errNoResult" });
+const aborted = () => new ProviderError("Request aborted", false);
 
 async function attempt(wire: Wire, p: Provider, req: ChatRequest, opts: CompleteOptions): Promise<string> {
   const { signal } = opts;
@@ -316,29 +352,46 @@ async function attempt(wire: Wire, p: Provider, req: ChatRequest, opts: Complete
   const { url, headers } = request;
   // Adapter options (reasoning, routing…) are plain body fields; they never touch URL or headers.
   const body = { ...(request.body as Record<string, unknown>), ...spec.body(p.options, p.model) };
-  const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
-  let res: Response;
+  const dog = watchdog();
+  dog.arm(RESPONSE_TIMEOUT_MS);
+  // Whatever failed, our own abort or a timeout is the real reason.
+  const reason = (e: unknown) => (signal?.aborted ? aborted() : dog.signal.aborted ? timedOut() : e);
   try {
-    res = await fetch(url, {
-      method: "POST",
-      headers: { "content-type": "application/json", ...headers },
-      body: JSON.stringify(body),
-      // A redirect would carry the key header and page text to another origin.
-      redirect: "error",
-      signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
-    });
-  } catch (e) {
-    if (signal?.aborted) throw new ProviderError("Request aborted", false);
-    throw new ProviderError(`Network error: ${(e as Error).message}`, true, { code: "errNetwork" });
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: "POST",
+        headers: { "content-type": "application/json", ...headers },
+        body: JSON.stringify(body),
+        // A redirect would carry the key header and page text to another origin.
+        redirect: "error",
+        signal: signal ? AbortSignal.any([signal, dog.signal]) : dog.signal,
+      });
+    } catch (e) {
+      throw reason(new ProviderError(`Network error: ${(e as Error).message}`, true, { code: "errNetwork" }));
+    }
+    dog.arm(IDLE_TIMEOUT_MS);
+    if (!res.ok) {
+      const retryable = res.status === 408 || res.status === 429 || res.status >= 500;
+      throw new ProviderError(`HTTP ${res.status}: ${await errorMessage(res)}`, retryable, { status: res.status, retryAfterMs: retryAfterMs(res) });
+    }
+    return await readBody(guarded(res, dog.arm), wire, opts.onText).catch((e: unknown) => Promise.reject(reason(e)));
+  } finally {
+    dog.stop();
   }
-  if (!res.ok) {
-    const retryable = res.status === 408 || res.status === 429 || res.status >= 500;
-    throw new ProviderError(`HTTP ${res.status}: ${await errorMessage(res)}`, retryable, { status: res.status, retryAfterMs: retryAfterMs(res) });
-  }
-  return readBody(res, wire, opts.onText);
 }
 
-const defaultSleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+/** Resolves after `ms`, or as soon as `signal` aborts so a stopped page frees its slot. */
+const defaultSleep = (ms: number, signal?: AbortSignal) =>
+  new Promise<void>((resolve) => {
+    const done = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", done);
+      resolve();
+    };
+    const timer = setTimeout(done, ms);
+    signal?.addEventListener("abort", done, { once: true });
+  });
 
 /** Sends one chat request, retrying transient failures with exponential backoff. */
 export async function complete(p: Provider, req: ChatRequest, opts: CompleteOptions = {}): Promise<string> {
@@ -349,9 +402,10 @@ export async function complete(p: Provider, req: ChatRequest, opts: CompleteOpti
       return await attempt(wire, p, req, opts);
     } catch (e) {
       // A stream cut by our own abort surfaces as a read error; it must not wait out a backoff.
-      if (opts.signal?.aborted) throw new ProviderError("Request aborted", false);
+      if (opts.signal?.aborted) throw aborted();
       if (!(e instanceof ProviderError) || !e.retryable || i >= MAX_ATTEMPTS) throw e;
-      await sleep(e.retryAfterMs ?? Math.min(BASE_BACKOFF_MS * 2 ** (i - 1), MAX_BACKOFF_MS));
+      await sleep(e.retryAfterMs ?? Math.min(BASE_BACKOFF_MS * 2 ** (i - 1), MAX_BACKOFF_MS), opts.signal);
+      if (opts.signal?.aborted) throw aborted();
     }
   }
 }
