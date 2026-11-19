@@ -66,9 +66,21 @@ function fakeTranslate(user) {
     .join("\n");
 }
 
+/** Mock of a service behind a firewall that rejects any request from an extension address. */
+const STRICT_PATH = "/strict/v1/chat/completions";
+
 function startServer() {
   const requests = [];
+  const strictOrigins = [];
   const server = createServer((req, res) => {
+    if (req.method === "POST" && req.url === STRICT_PATH) {
+      strictOrigins.push(req.headers.origin ?? null);
+      if (/^(chrome|moz)-extension:/.test(req.headers.origin ?? "")) {
+        res.writeHead(412, { "content-type": "text/html" }).end("<html><body>Blocked</body></html>");
+        return;
+      }
+      req.url = "/v1/chat/completions"; // otherwise the same mock model
+    }
     const path = req.method === "GET" ? new URL(req.url, "http://x").pathname : "";
     if (path === "/page.html" || path === "/layout.html") {
       res.writeHead(200, { "content-type": "text/html; charset=utf-8" }).end(path === "/page.html" ? PAGE : LAYOUT_PAGE);
@@ -103,7 +115,7 @@ function startServer() {
     }
     res.writeHead(404).end();
   });
-  return new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve({ server, requests, port: server.address().port })));
+  return new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve({ server, requests, strictOrigins, port: server.address().port })));
 }
 
 async function step(name, fn) {
@@ -112,7 +124,7 @@ async function step(name, fn) {
   console.log("ok");
 }
 
-const { server, requests, port } = await startServer();
+const { server, requests, strictOrigins, port } = await startServer();
 const userDataDir = await mkdtemp(join(tmpdir(), "bt-e2e-"));
 const context = await chromium.launchPersistentContext(userDataDir, {
   executablePath,
@@ -612,6 +624,68 @@ try {
       }
       throw new Error("content script was not unregistered");
     });
+  });
+
+  await step("a custom service can be reached without the extension's Origin", async () => {
+    const strict = { id: "strict", name: "Strict", adapter: "custom-openai", endpoint: `http://127.0.0.1:${port}${STRICT_PATH}`, apiKey: "", model: "mock-1", options: {} };
+    await worker.evaluate(async (strict) => {
+      const { settings } = await chrome.storage.local.get("settings");
+      await chrome.storage.local.set({ settings: { ...settings, providers: [...settings.providers, strict] } });
+    }, strict);
+    await options.reload();
+    await options.bringToFront();
+    await options.click(".svc:has(#svc-strict) .svc-actions button:text-is('Edit')");
+    const test = async (expected) => {
+      await options.getByRole("button", { name: "Test", exact: true }).click();
+      await options.waitForSelector(`.drawer-foot .status.${expected}`, { timeout: 10_000 });
+      return options.$eval(".drawer-foot .status", (el) => el.textContent);
+    };
+    // Off (the default): the browser adds the extension's Origin and the service refuses.
+    assert.match(await test("error"), /412/);
+    assert.match(strictOrigins.at(-1) ?? "", /^chrome-extension:\/\//);
+    // On, before saving: the test already goes out without Origin.
+    await options.getByRole("button", { name: "More options" }).click();
+    await options.getByRole("switch", { name: "Don't send the extension's origin" }).check();
+    assert.match(await test("ok"), /\[ZH\]/);
+    assert.equal(strictOrigins.at(-1), null);
+    await options.click(".drawer-foot button.primary");
+    const sessionRules = () => worker.evaluate(() => chrome.declarativeNetRequest.getSessionRules());
+    await worker.evaluate(async () => {
+      for (let i = 0; i < 50 && (await chrome.declarativeNetRequest.getSessionRules()).length === 0; i++) await new Promise((r) => setTimeout(r, 100));
+    });
+    assert.deepEqual((await sessionRules()).map((r) => r.condition.requestDomains), [["127.0.0.1"]]);
+    // Translating a page through the saved service works too (a new endpoint misses the cache).
+    await worker.evaluate(async () => {
+      const { settings } = await chrome.storage.local.get("settings");
+      await chrome.storage.local.set({ settings: { ...settings, activeProviderId: "strict" } });
+    });
+    const sent = strictOrigins.length;
+    const strictUrl = `${pageUrl}?strict`;
+    const strictPage = await context.newPage();
+    await strictPage.goto(strictUrl);
+    await options.evaluate(async (url) => {
+      const [tab] = await chrome.tabs.query({ url });
+      await chrome.runtime.sendMessage({ type: "toggle-tab", tabId: tab.id });
+    }, strictUrl);
+    await strictPage.waitForSelector("#p1 bt-tr.bt-done", { timeout: 10_000 });
+    assert.match(await strictPage.$eval("#p1 bt-tr", (el) => el.textContent), /^\[ZH\]/);
+    assert.ok(strictOrigins.length > sent);
+    assert.ok(strictOrigins.slice(sent).every((o) => o === null));
+    await strictPage.close();
+    // The normal page on the same host keeps its Origin: the rule only covers our own requests.
+    const before = strictOrigins.length;
+    const body = JSON.stringify({ messages: [{ role: "user", content: "x" }] });
+    await page.evaluate(([url, body]) => fetch(url, { method: "POST", body }).then((r) => r.text()), [`http://127.0.0.1:${port}${STRICT_PATH}`, body]);
+    assert.deepEqual(strictOrigins.slice(before), [`http://127.0.0.1:${port}`]);
+    // Removing the service removes its rule.
+    await worker.evaluate(async () => {
+      const { settings } = await chrome.storage.local.get("settings");
+      await chrome.storage.local.set({ settings: { ...settings, activeProviderId: "mock", providers: settings.providers.filter((p) => p.id !== "strict") } });
+    });
+    await worker.evaluate(async () => {
+      for (let i = 0; i < 50 && (await chrome.declarativeNetRequest.getSessionRules()).length > 0; i++) await new Promise((r) => setTimeout(r, 100));
+    });
+    assert.deepEqual(await sessionRules(), []);
   });
 } finally {
   await context.close();

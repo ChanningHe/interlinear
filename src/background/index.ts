@@ -39,6 +39,7 @@ import {
 } from "../providers/chatgpt-auth";
 import { listModels } from "../providers/models";
 import { createIdbCache } from "./cache";
+import { syncOriginRules } from "./origin-rules";
 import { createTranslator, publicError, publicFailure, type CompleteRequestOptions } from "./translate";
 
 const log = (...args: unknown[]) => console.warn("[interlinear]", ...args);
@@ -59,7 +60,9 @@ const getSettings = () => (settings ??= loadSettings());
 chrome.storage.onChanged.addListener((changes, area) => {
   if (area !== "local" || !(STORAGE_KEY in changes)) return;
   settings = undefined;
+  drafts = new Map();
   syncContentScripts();
+  void syncRequestRules();
   void createMenus(); // titles follow the interface language
   void notifyTabs();
 });
@@ -109,6 +112,34 @@ function syncContentScripts(): void {
 
 chrome.permissions.onAdded.addListener(syncContentScripts);
 chrome.permissions.onRemoved.addListener(syncContentScripts);
+
+// --- request rules (services that must not see the extension's Origin) ----------------------
+
+/**
+ * Services the settings page is testing or listing models for before they are saved, by id.
+ * Their rules apply at once so "Test" reflects the drawer; the next settings change clears them.
+ */
+let drafts: ReadonlyMap<string, Provider> = new Map();
+let syncingRules = Promise.resolve();
+
+/** Serialized so overlapping changes cannot interleave rule updates. */
+function syncRequestRules(): Promise<void> {
+  syncingRules = syncingRules
+    .then(async () => {
+      const saved = (await getSettings()).providers.filter((p) => !drafts.has(p.id));
+      await syncOriginRules([...saved, ...drafts.values()]);
+    })
+    .catch((e: unknown) => log("request rule sync failed:", e));
+  return syncingRules;
+}
+
+function useDraft(p: Provider): Promise<void> {
+  drafts = new Map([...drafts, [p.id, p]]);
+  return syncRequestRules();
+}
+
+// Session rules survive worker restarts but not browser restarts; re-derive them on every start.
+void syncRequestRules();
 
 // --- translation ---------------------------------------------------------------------------
 
@@ -184,6 +215,7 @@ async function modelsFor(input: Provider) {
   if (!provider) return { ok: false, error: "Invalid provider definition" };
   try {
     await assertAccess(provider);
+    await useDraft(provider);
     return { ok: true, models: await withKeepAlive(() => listModels(provider, { accessToken: accessToken(provider.id) })) };
   } catch (e) {
     return { ok: false, error: message(e) };
@@ -269,6 +301,7 @@ async function testProvider(input: Provider): Promise<{ ok: boolean; text?: stri
     return { ok: false, error: errors.map((k) => t(k)).join("; ") };
   }
   const s = await getSettings();
+  await useDraft(provider);
   try {
     const raw = await completeWithPermission(
       provider,

@@ -276,6 +276,8 @@ export const ja: Messages = {
   optProviderPlaceholder: "プロバイダーを追加（例: groq）",
   optZdr: "データ保持ゼロのみ",
   optZdrDesc: "何も保持しないエンドポイントにのみルーティングします。",
+  optHideOrigin: "拡張機能のオリジンを送信しない",
+  optHideOriginDesc: "ブラウザ拡張機能からのリクエストを拒否するサービスがあります。オンにすると、このサービスへのリクエストは拡張機能のアドレス（Origin）なしで送信されます。",
   optFallbacks: "フォールバックを許可",
   optFallbacksDesc: "優先プロバイダーが使えないときは他を使います。",
   optServiceTier: "サービス階層",

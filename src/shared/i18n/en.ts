@@ -291,6 +291,8 @@ export const en = {
   optProviderPlaceholder: "Add a provider, e.g. groq",
   optZdr: "Zero data retention only",
   optZdrDesc: "Route only to endpoints that keep nothing.",
+  optHideOrigin: "Don't send the extension's origin",
+  optHideOriginDesc: "Some services reject requests from browser extensions. When on, requests to this service are sent without the extension's address (Origin).",
   optFallbacks: "Allow fallbacks",
   optFallbacksDesc: "Use other providers when the preferred ones are unavailable.",
   optServiceTier: "Service tier",

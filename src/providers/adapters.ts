@@ -3,7 +3,9 @@ import type { MessageKey } from "../shared/i18n";
 // Every kind of translation service the settings page can add. A service the user creates is an
 // adapter id plus their own name, model, credentials and option values; the adapter decides how
 // it connects, which options exist (with translation-friendly defaults) and how those options
-// become request fields. Option values are data only: they never become URLs or headers.
+// become request fields. Option values are data only: they never become URLs or headers, except
+// that the custom types' "hideOrigin" switch lets the background remove the browser-added Origin
+// header from this extension's own requests to that service (see src/background/origin-rules.ts).
 
 export type AdapterId =
   | "openrouter"
@@ -150,6 +152,15 @@ function openrouterBody(o: ProviderOptions): Record<string, unknown> {
     ...(Object.keys(provider).length > 0 && { provider }),
   };
 }
+
+// ---- Custom services ----------------------------------------------------------------------------
+
+/** Switch read by the background, never sent: requests to the service go out without Origin. */
+export const HIDE_ORIGIN_OPTION = "hideOrigin";
+
+const CUSTOM_OPTIONS: readonly OptionField[] = [
+  { kind: "switch", key: HIDE_ORIGIN_OPTION, label: "optHideOrigin", desc: "optHideOriginDesc", default: false, advanced: true },
+];
 
 // ---- The catalog ------------------------------------------------------------------------------
 
@@ -314,7 +325,7 @@ export const ADAPTERS: readonly AdapterSpec[] = [
     editableEndpoint: true,
     defaultModel: "",
     models: "openai",
-    options: [],
+    options: CUSTOM_OPTIONS,
     body: () => ({}),
   },
   {
@@ -328,7 +339,7 @@ export const ADAPTERS: readonly AdapterSpec[] = [
     editableEndpoint: true,
     defaultModel: "",
     models: "anthropic",
-    options: [],
+    options: CUSTOM_OPTIONS,
     body: () => ({}),
   },
 ];

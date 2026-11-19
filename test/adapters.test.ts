@@ -45,6 +45,14 @@ describe("adapter catalog", () => {
 });
 
 describe("request bodies", () => {
+  test("custom services: the hide-origin switch is off by default, advanced and never a body field", () => {
+    for (const id of ["custom-openai", "custom-anthropic"] as const) {
+      const spec = adapterOf(id);
+      expect(spec.options).toEqual([expect.objectContaining({ kind: "switch", key: "hideOrigin", default: false, advanced: true })]);
+      expect(body(svc(id, { options: normalizeOptions(spec, { hideOrigin: true }) }))).toEqual({});
+    }
+  });
+
   test("OpenRouter: reasoning off, throughput routing and no data collection by default", () => {
     expect(body(svc("openrouter"))).toEqual({ reasoning: { effort: "none" }, provider: { sort: "throughput", data_collection: "deny" } });
     const custom = svc("openrouter", {

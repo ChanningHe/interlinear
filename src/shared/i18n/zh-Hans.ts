@@ -276,6 +276,8 @@ export const zhHans: Messages = {
   optProviderPlaceholder: "添加服务商，如 groq",
   optZdr: "仅零数据留存",
   optZdrDesc: "只路由到不保留任何数据的端点。",
+  optHideOrigin: "不发送扩展的来源",
+  optHideOriginDesc: "有些服务会拒绝来自浏览器扩展的请求。开启后，发往此服务的请求不再带有扩展的地址（Origin）。",
   optFallbacks: "允许回退",
   optFallbacksDesc: "偏好的服务商不可用时，使用其他服务商。",
   optServiceTier: "服务等级",

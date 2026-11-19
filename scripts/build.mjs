@@ -39,7 +39,9 @@ function manifest(target) {
     default_locale: "en",
     // activeTab + scripting: we only touch a page after the user clicks, presses a shortcut or
     // picks a context menu item. contextMenus shows no install warning.
-    permissions: ["storage", "activeTab", "scripting", "contextMenus"],
+    // declarativeNetRequestWithHostAccess shows no install warning and only acts where host
+    // access is granted: it removes Origin from our own requests to services that opt in.
+    permissions: ["storage", "activeTab", "scripting", "contextMenus", "declarativeNetRequestWithHostAccess"],
     // Requested at runtime, per origin: API endpoints the user configures, sites they choose to
     // always translate, and every site only if they turn on the page helpers everywhere.
     optional_host_permissions: ["https://*/*", "http://*/*", "http://localhost/*", "http://127.0.0.1/*"],

@@ -276,6 +276,8 @@ export const zhHant: Messages = {
   optProviderPlaceholder: "新增服務商，如 groq",
   optZdr: "僅零資料保留",
   optZdrDesc: "只路由到不保留任何資料的端點。",
+  optHideOrigin: "不傳送擴充功能的來源",
+  optHideOriginDesc: "有些服務會拒絕來自瀏覽器擴充功能的請求。開啟後，傳往此服務的請求不再帶有擴充功能的位址（Origin）。",
   optFallbacks: "允許回退",
   optFallbacksDesc: "偏好的服務商不可用時，使用其他服務商。",
   optServiceTier: "服務等級",
