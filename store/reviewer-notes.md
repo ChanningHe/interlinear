@@ -21,7 +21,15 @@ BUILD (the uploaded source zip is `git archive` of the release tag)
   locale files are generated from src/shared/i18n by scripts/build.mjs.
 
 PERMISSIONS
-- storage, activeTab, scripting, contextMenus. No host permission at install time.
+- storage, activeTab, scripting, contextMenus, declarativeNetRequestWithHostAccess. No host
+  permission at install time.
+- declarativeNetRequestWithHostAccess: only for an opt-in switch (off by default) on custom
+  OpenAI/Anthropic-compatible services. Some such services reject requests that carry a
+  moz-extension:// Origin. When the user turns the switch on, the background adds a session
+  rule that removes the Origin header from requests this extension itself sends to that one
+  endpoint host (condition: requestDomains = the endpoint host, initiatorDomains = this
+  extension, resourceTypes = xmlhttprequest). It never touches the user's own browsing. See
+  src/background/origin-rules.ts.
 - optional_host_permissions are requested at runtime, one origin at a time: the API endpoint
   the user configures, sites the user chooses to always translate, and all sites only if the
   user turns on the page helpers everywhere.
@@ -58,6 +66,7 @@ language model service that the user configures, showing the translation next to
 | `activeTab` | Translates the current tab only after the user clicks the toolbar button, presses a shortcut or uses the context menu. |
 | `scripting` | Injects the translation script into the active tab after that user action, instead of running on every page. |
 | `contextMenus` | Adds "Translate page / show original" and "Translate selection" items to the right-click menu. |
+| `declarativeNetRequestWithHostAccess` | Only for an opt-in switch (off by default) on custom OpenAI/Anthropic-compatible services: some of them reject requests carrying the chrome-extension:// Origin. When the user turns it on, a session rule removes the Origin header from requests this extension itself sends to that one endpoint host. It never modifies the user's own browsing and acts only on hosts the user granted. |
 | Host permissions (optional) | Requested at runtime per origin: the API endpoint the user configures (so requests can reach it), sites the user chooses to always translate, and all sites only if the user turns on the page helpers everywhere. Nothing is granted at install. |
 
 **Remote code**: No, I am not using remote code. All JavaScript is in the package; network
